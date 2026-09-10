@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="WinEmulator.vcxproj" />
+  <Project Path="WinEmulator.vcxproj" Id="ca0cfedb-ad48-4790-9780-c038cc72a155" />
 </Solution>
