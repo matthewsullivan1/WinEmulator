@@ -102,7 +102,7 @@ MemoryResult GuestMemory::write(uint64_t address, const void* src, size_t size) 
 	size_t remaining = size;
 	uint64_t currentAddr = address;
 
-	MemoryResult m;
+	MemoryResult m{};
 
 	while (remaining > 0) {
 		uint64_t pageBase = alignDown(currentAddr, PAGE_SIZE);
@@ -169,4 +169,16 @@ MemoryStatus GuestMemory::validateRange(uint64_t address, size_t size, AccessTyp
 	}
 
 	return MemoryStatus::Success;
+}
+
+const Page* GuestMemory::findPage(uint64_t address) const {
+	uint64_t pageBase = alignDown(address, PAGE_SIZE);
+
+	auto it = pages_.find(pageBase);
+
+	if (it == pages_.end()) {
+		return nullptr;
+	}
+
+	return &it->second;
 }
