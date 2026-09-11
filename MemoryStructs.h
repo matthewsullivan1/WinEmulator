@@ -1,5 +1,6 @@
 #pragma once
 #include <array>
+#include <optional>
 
 constexpr uint64_t PAGE_SIZE = 0x1000;
 constexpr uint64_t ALLOCATION_GRANULARITY = 0x10000;
@@ -9,7 +10,15 @@ constexpr uint64_t alignDown(uint64_t value, uint64_t alignment) {
     return value & ~(alignment - 1);
 }
 
-constexpr uint64_t alignUp(uint64_t value, uint64_t alignment) {
+inline std::optional<uint64_t> alignUp(uint64_t value, uint64_t alignment) {
+    if (alignment == 0) {
+        return std::nullopt;
+    }
+
+    if (value > UINT64_MAX - (alignment - 1)) {
+        return std::nullopt;
+    }
+
     return (value + alignment - 1) & ~(alignment - 1);
 }
 
@@ -87,7 +96,7 @@ struct MemoryResult {
     }
 };
 
-static PageChunk getPageChunk(uint64_t address, size_t remaining) {
+inline PageChunk getPageChunk(uint64_t address, size_t remaining) {
     uint64_t pageBase = alignDown(address, PAGE_SIZE);
     size_t offset = address & (PAGE_SIZE - 1);
 
