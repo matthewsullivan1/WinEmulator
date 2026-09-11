@@ -1,10 +1,5 @@
-#include <cstdint>
-#include <unordered_map>
-#include <iostream>
-#include <Windows.h>
-
+// GuestMemory.cpp 
 #include "GuestMemory.h"
-#include "MemoryStructs.h"
 
 MemoryStatus GuestMemory::mapPage(uint64_t pageBase, Protection protection) {
 	if (pageBase % PAGE_SIZE != 0) {
