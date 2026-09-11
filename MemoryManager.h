@@ -36,11 +36,10 @@ public:
 		Protection protection, 
 		RegionType type);
 
-	const MemoryRegion* findRegion(uint64_t address) const;
-
 	std::optional<MemoryInfo> query(uint64_t address) const;
 
 private:
+	const MemoryRegion* findRegion(uint64_t address) const;
 	std::optional<uint64_t> findFreeAddress(size_t size) const;
 
 	GuestMemory& memory_;

@@ -177,6 +177,70 @@ std::expected<void, MemoryStatus> MemoryManager::release(uint64_t address) {
     return {};
 }
 
+std::expected<uint64_t, MemoryStatus> MemoryManager::allocate(uint64_t preferredAddress, size_t size, Protection protection, RegionType type) {
+
+    auto reserveBaseExp = reserve(preferredAddress, size, type);
+
+    if (!reserveBaseExp.has_value()) {
+        return std::unexpected(reserveBaseExp.error());
+    }
+
+    uint64_t reserveBase = reserveBaseExp.value();
+    auto commitBaseExp = commit(reserveBase, size, protection);
+
+    if (!commitBaseExp.has_value()) {
+        release(reserveBase);
+        return std::unexpected(commitBaseExp.error());
+    }
+
+    return reserveBase;
+}
+
+const MemoryRegion* MemoryManager::findRegion(uint64_t address) const {
+    if (regions_.empty()) {
+        return nullptr;
+    }
+
+    auto it = regions_.upper_bound(address);
+
+    if (it == regions_.begin()) {
+        return nullptr;
+    }
+
+    --it;
+
+    const MemoryRegion& region = it->second;
+    uint64_t regionEnd = region.base + region.size;
+
+    if (address >= region.base && address < regionEnd) {
+        return &region;
+    }
+    
+    return nullptr;
+}
+
+std::optional<MemoryInfo> MemoryManager::query(uint64_t address) const {
+    const MemoryRegion* region = findRegion(address);
+
+    if (!region) {
+        return std::nullopt;
+    }
+
+    uint64_t pageBase = alignDown(address, PAGE_SIZE);
+    const Page* page = memory_.findPage(pageBase);
+
+    MemoryInfo info = {
+        .regionBase = region->base,
+        .pageBase = pageBase,
+        .regionSize = region->size,
+        .state = page ? PageState::Committed : PageState::Reserved,
+        .protection = page ? page->protection : Protection{},
+        .type = region->type
+    };
+
+    return info;
+}
+
 
 std::optional<uint64_t> MemoryManager::findFreeAddress(size_t size) const {
 	auto candidateOpt = alignUp(DYNAMIC_BASE, ALLOCATION_GRANULARITY);
