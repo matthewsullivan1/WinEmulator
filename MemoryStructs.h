@@ -41,14 +41,23 @@ enum class AccessType {
 
 enum class MemoryStatus {
     Success,
+
     InvalidSize,
     InvalidAddress,
     AddressOverflow,
     MisalignedAddress,
+    NoFreeAddress,
+
     AddressMapped,
     AlreadyReserved,
+    AlreadyCommitted,
+
+    NotMapped,
     NotReserved,
     NotCommitted,
+
+    RangeCrossesRegion,
+
     ProtectionViolation,
     RegionNotFound,
     InvalidRelease
