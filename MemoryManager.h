@@ -48,5 +48,6 @@ private:
 };
 
 // Reservation : 64KiB address aligned (0x10000), of any size
-// Commit	   : Pages within the reservation address range should now actually exist in the regions GuestMemory instance
+// Any operation should operate under the bounds of one reservation 
+// Commit	   : Page align requested address down, page align size up, create (base + size) / PAGE_SIZE pages 
 // Allocate    : Combines reserve + commit 
