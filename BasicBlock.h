@@ -7,7 +7,7 @@
 #include "Instruction.h"
 
 struct BasicBlock {
-	uint64_t startRva;
-	std::vector<Instruction> instructions;
-	std::vector<uint32_t> successors;
+	uint64_t startRva = 0;
+	std::vector<Instruction> instructions{};
+	std::vector<uint32_t> successors{};
 };

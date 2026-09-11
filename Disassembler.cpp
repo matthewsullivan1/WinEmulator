@@ -41,7 +41,7 @@ void Disassembler::disassembleSection(const IMAGE_SECTION_HEADER& section) const
     }
 
     // Don't allow malformed section metadata to go past the file.
-    remaining = min(
+    remaining = std::min(
         remaining,
         data.size() - offset
     );

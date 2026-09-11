@@ -156,7 +156,7 @@ const ULONGLONG PEFile::imageBase() const {
 const IMAGE_SECTION_HEADER* PEFile::sectionFromRva(DWORD rva) const {
 	for (const auto& section : sections()) {
 		const DWORD start = section.VirtualAddress;
-		const DWORD end = start + max(section.Misc.VirtualSize, section.SizeOfRawData);
+		const DWORD end = start + std::max(section.Misc.VirtualSize, section.SizeOfRawData);
 
 		if (rva >= start && rva < end) {
 			return &section;
