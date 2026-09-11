@@ -4,154 +4,169 @@
 #include <Windows.h>
 
 #include "GuestMemory.h"
+#include "MemoryStructs.h"
 
-bool GuestMemory::map(uint64_t address, size_t size, Protection protection) {
-	if (size == 0) {
-		return false;
+MemoryStatus GuestMemory::mapPage(uint64_t pageBase, Protection protection) {
+	if (pageBase % PAGE_SIZE != 0) {
+		return MemoryStatus::MisalignedAddress;
+	}
+
+	if (pages_.contains(pageBase)) {
+		return MemoryStatus::AddressMapped;
 	}
 	
-	if (address % PAGE_SIZE != 0) {
-		return false;
-	}
-
-	size_t alignedSize = (size + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
-
-	for (uint64_t current = address; current < address + alignedSize; current += PAGE_SIZE) {
-		if (pages_.find(current) != pages_.end()) {
-			return false;
-		}
-	}
-
-	MemoryRegion region{
-		.base = address,
-		.size = alignedSize,
+	pages_.emplace(pageBase, Page{
+		.data = {},
 		.protection = protection
-	};
+	});
 
-	regions_.emplace(address, region);
-
-	for (uint64_t current = address; current < address + alignedSize; current += PAGE_SIZE) {
-		Page page; 
-		page.protection = protection; 
-		pages_.emplace(current, std::move(page));
-	}
-
-	return true;
+	return MemoryStatus::Success;
 }
 
-// Operates on entire MemoryRegion. Address must be regions_ key, and size must be equal to regions_[address].size
-bool GuestMemory::unmap(uint64_t address, size_t size) {
-	if (size == 0) {
-		return false;
+MemoryStatus GuestMemory::unmapPage(uint64_t pageBase) {
+	if (pageBase % PAGE_SIZE != 0) {
+		return MemoryStatus::MisalignedAddress;
 	}
 
-	// Note that any value [1, 4096] will pass this check
-	if (address % PAGE_SIZE != 0) {
-		return false;
+	if (!(pages_.contains(pageBase))) {
+		return MemoryStatus::InvalidAddress;
 	}
 
-	size_t alignedSize = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+	pages_.erase(pageBase);
 
-	// Either address is incorrect or is not mapped
-	if (!(regions_.contains(address))) {
-		return false;
-	}
-
-	// Size is invalid
-	if (regions_.at(address).size != alignedSize) {
-		return false;
-	}
-
-	for (uint64_t current = address; current < address + alignedSize; current += PAGE_SIZE) {
-		pages_.erase(current);
-	}
-
-	regions_.erase(address);
-	return true;
+	return MemoryStatus::Success;
 }
 
-bool GuestMemory::protect(uint64_t address, size_t size, Protection protection) {
-	if (size == 0) {
-		return false;
+MemoryStatus GuestMemory::ProtectPage(uint64_t pageBase, Protection protection) {
+	if (pageBase % PAGE_SIZE != 0) {
+		return MemoryStatus::MisalignedAddress;
 	}
 
-	// Note that any value [1, 4096] will pass this check
-	if (address % PAGE_SIZE != 0) {
-		return false;
+	if (!(pages_.contains(pageBase))) {
+		return MemoryStatus::InvalidAddress;
 	}
 
-	size_t alignedSize = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+	pages_.at(pageBase).protection = protection;
 
-	// Either address is incorrect or is not mapped
-	if (!(regions_.contains(address))) {
-		return false;
-	}
-
-	// Size is invalid
-	if (regions_.at(address).size != alignedSize) {
-		return false;
-	}
-
-	for (uint64_t current = address; current < address + alignedSize; current += PAGE_SIZE) {
-		pages_.at(current).protection = protection;
-	}
-
-	regions_.at(address).protection = protection;
-
-	return true;
+	return MemoryStatus::Success;
 }
 
-bool GuestMemory::read(uint64_t address, void* dst, size_t size) const {
-	if (size == 0) {
-		return true;
+MemoryResult GuestMemory::read(uint64_t address, void* dst, size_t size) const {
+	if (!dst) {
+		return MemoryResult{ .status = MemoryStatus::InvalidAddress };
+	}
+	
+	MemoryStatus status = validateRange(address, size, AccessType::Read);
+	if (status != MemoryStatus::Success) {
+		return MemoryResult{ .status = status };
 	}
 
 	auto* out = static_cast<uint8_t*>(dst);
+
 	size_t remaining = size;
-	uint64_t currentAddress = address; 
+	uint64_t currentAddr = address;
+
+	MemoryResult m{};
 
 	while (remaining > 0) {
-		// Mask offset
-		uint64_t pageBase = currentAddress & ~(PAGE_SIZE - 1);
-		// Mask pageBase
-		size_t offset = currentAddress & (PAGE_SIZE - 1);
+		uint64_t pageBase = alignDown(currentAddr, PAGE_SIZE);
+		size_t offset = currentAddr - pageBase;
+
+		const Page& page = pages_.at(pageBase);
+		size_t bytesToCopy = std::min(remaining, PAGE_SIZE - offset);
+
+		std::memcpy(out, page.data.data() + offset, bytesToCopy);
+
+		m.bytesTransferred += bytesToCopy;
+		out += bytesToCopy;
+		currentAddr += bytesToCopy;
+		remaining -= bytesToCopy;
+	}
+
+	m.status = MemoryStatus::Success;
+	return m;
+}
+
+MemoryResult GuestMemory::write(uint64_t address, const void* src, size_t size) {
+	if (!src) {
+		return MemoryResult{ .status = MemoryStatus::InvalidAddress };
+	}
+
+	MemoryStatus status = validateRange(address, size, AccessType::Write);
+	if (status != MemoryStatus::Success) {
+		return MemoryResult{ .status = status };
+	}
+
+	const auto* in = static_cast<const uint8_t*>(src);
+
+	size_t remaining = size;
+	uint64_t currentAddr = address;
+
+	MemoryResult m;
+
+	while (remaining > 0) {
+		uint64_t pageBase = alignDown(currentAddr, PAGE_SIZE);
+		size_t offset = currentAddr - pageBase;
+
+		Page& page = pages_.at(pageBase);
+		size_t bytesToCopy = std::min(remaining, PAGE_SIZE - offset);
+		
+		memcpy(page.data.data() + offset, in, bytesToCopy);
+
+		m.bytesTransferred += bytesToCopy;
+		in += bytesToCopy;
+		currentAddr += bytesToCopy;
+		remaining -= bytesToCopy;
+	}
+
+	m.status = MemoryStatus::Success;
+	return m;
+}
+
+MemoryStatus GuestMemory::validateRange(uint64_t address, size_t size, AccessType access) const {
+	if (size == 0) {
+		return MemoryStatus::Success;
+	}
+
+	if (size > UINT64_MAX - address) {
+		return MemoryStatus::AddressOverflow;
+	}
+
+	uint64_t currentAddr = address;
+	size_t remaining = size;
+
+	while (remaining > 0) {
+		uint64_t pageBase = alignDown(currentAddr, PAGE_SIZE);
+		size_t offset = currentAddr - pageBase;
 
 		auto it = pages_.find(pageBase);
 
 		if (it == pages_.end()) {
-			return false;
+			return MemoryStatus::InvalidAddress;
 		}
 
-		const Page& page = it->second;
+		switch (access) {
+		case AccessType::Read:
+			if (!it->second.protection.r)
+				return MemoryStatus::ProtectionViolation;
+			break;
 
-		if (!page.protection.r) {
-			return false;
+		case AccessType::Write:
+			if (!it->second.protection.w)
+				return MemoryStatus::ProtectionViolation;
+			break;
+
+		case AccessType::Execute:
+			if (!it->second.protection.x)
+				return MemoryStatus::ProtectionViolation;
+			break;
 		}
 
-		size_t availableInPage = PAGE_SIZE - offset;
-		size_t bytesToCopy = (((remaining) < (availableInPage)) ? (remaining) : (availableInPage));
-		std::memcpy(
-			out,
-			page.data.data() + offset,
-			bytesToCopy
-		);
-		
-		out += bytesToCopy;
-		currentAddress += bytesToCopy;
-		remaining -= bytesToCopy;
+		size_t chunk = std::min(remaining, PAGE_SIZE - offset);
+
+		currentAddr += chunk;
+		remaining -= chunk;
 	}
 
-	return true;
+	return MemoryStatus::Success;
 }
-
-bool GuestMemory::write(uint64_t dst, void* src, size_t size) {
-	if (size == 0) {
-		return true;
-	}
-
-
-
-
-}
-
-
