@@ -108,9 +108,9 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpp23</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -143,6 +143,8 @@
     <ClInclude Include="Disassembler.h" />
     <ClInclude Include="GuestMemory.h" />
     <ClInclude Include="Instruction.h" />
+    <ClInclude Include="MemoryManager.h" />
+    <ClInclude Include="MemoryStructs.h" />
     <ClInclude Include="PECompat.h" />
     <ClInclude Include="PEFile.h" />
   </ItemGroup>
@@ -150,6 +152,7 @@
     <ClCompile Include="Disassembler.cpp" />
     <ClCompile Include="GuestMemory.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="MemoryManager.cpp" />
     <ClCompile Include="PEFile.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
