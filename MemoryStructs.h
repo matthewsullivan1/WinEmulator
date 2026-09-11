@@ -3,7 +3,7 @@
 
 constexpr uint64_t PAGE_SIZE = 0x1000;
 constexpr uint64_t ALLOCATION_GRANULARITY = 0x10000;
-constexpr uint64_t DYNAMIC_BASE = 0x0000010000000000;
+constexpr uint64_t DYNAMIC_BASE = 0x0000000010000000;
 
 constexpr uint64_t alignDown(uint64_t value, uint64_t alignment) {
     return value & ~(alignment - 1);
@@ -12,6 +12,38 @@ constexpr uint64_t alignDown(uint64_t value, uint64_t alignment) {
 constexpr uint64_t alignUp(uint64_t value, uint64_t alignment) {
     return (value + alignment - 1) & ~(alignment - 1);
 }
+
+enum class RegionType {
+    Private,
+    Image,
+    Mapped
+};
+
+enum class PageState {
+    Reserved,
+    Committed
+};
+
+enum class AccessType {
+    Read,
+    Write,
+    Execute
+};
+
+enum class MemoryStatus {
+    Success,
+    InvalidSize,
+    InvalidAddress,
+    AddressOverflow,
+    MisalignedAddress,
+    AddressMapped,
+    AlreadyReserved,
+    NotReserved,
+    NotCommitted,
+    ProtectionViolation,
+    RegionNotFound,
+    InvalidRelease
+};
 
 struct Protection {
     bool r = false;
@@ -53,38 +85,6 @@ struct MemoryResult {
     bool succeeded() const {
         return status == MemoryStatus::Success;
     }
-};
-
-enum class RegionType {
-    Private,
-    Image,
-    Mapped
-};
-
-enum class PageState {
-    Reserved,
-    Committed
-};
-
-enum class AccessType {
-    Read,
-    Write,
-    Execute
-};
-
-enum class MemoryStatus {
-    Success,
-    InvalidSize,
-    InvalidAddress,
-    AddressOverflow,
-    MisalignedAddress,
-    AddressMapped,
-    AlreadyReserved,
-    NotReserved,
-    NotCommitted,
-    ProtectionViolation,
-    RegionNotFound,
-    InvalidRelease
 };
 
 static PageChunk getPageChunk(uint64_t address, size_t remaining) {
