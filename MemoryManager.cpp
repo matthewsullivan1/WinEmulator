@@ -283,3 +283,48 @@ std::optional<uint64_t> MemoryManager::findFreeAddress(size_t size) const {
 
     return candidate;
 }
+
+MemoryResult MemoryManager::read(uint64_t address, void* dst, size_t size) const {
+    return memory_.read(address, dst, size);
+}
+
+MemoryResult MemoryManager::write(uint64_t address, const void* src, size_t size) {
+    return memory_.write(address, src, size);
+}
+
+MemoryResult MemoryManager::protect(uint64_t address, size_t size, Protection protection) {
+
+    if (size == 0) {
+        return MemoryResult{
+            .status = MemoryStatus::InvalidSize,
+        };
+    }
+
+    auto end = alignUp(address + size, PAGE_SIZE);
+    
+    if (!end) {
+        return MemoryResult{
+            .status = MemoryStatus::AddressOverflow
+        };
+    }
+
+    uint64_t start = alignDown(address, PAGE_SIZE);
+
+    // Note that this operation is not atomic. protection changes made before failure will persist
+    for (uint64_t page = start; page < end; page += PAGE_SIZE) {
+        MemoryStatus status = memory_.ProtectPage(page, protection);
+
+        if (status != MemoryStatus::Success) {
+            return MemoryResult{
+                .status = status,
+                .bytesTransferred = start - page
+            };
+        }
+    }
+
+    return MemoryResult{
+        .status = MemoryStatus::Success,
+        .bytesTransferred = size
+    };
+
+}
