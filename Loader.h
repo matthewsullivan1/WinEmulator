@@ -12,6 +12,7 @@ enum class ImageType {
 
 struct ImageContext {
     uint64_t baseAddress = 0;
+    uint64_t preferredBase = 0;
     uint64_t entryPoint = 0;
     size_t size = 0;
 
@@ -32,6 +33,8 @@ enum class LoaderStatus {
     ImageHeaderCommitFailed,
     ImageSectionCommitFailed,
 
+    ImageRelocationFailed,
+
     
     Other
 };
@@ -42,9 +45,8 @@ public:
 	explicit Loader(MemoryManager& mm) : mm_(mm) {};
 
     LoaderStatus mapImage(PEFile& pe, ImageContext* ctx);
-
-
-
+    LoaderStatus relocateImage(ImageContext* ctx);
+    LoaderStatus resolveImageImports(ImageContext* ctx);
 
 private:
 	MemoryManager& mm_;
