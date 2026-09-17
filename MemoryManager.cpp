@@ -298,44 +298,40 @@ std::optional<uint64_t> MemoryManager::findFreeAddress(size_t size) const {
     return candidate;
 }
 
-MemoryResult MemoryManager::read(uint64_t address, void* dst, size_t size) const {
+MemoryStatus MemoryManager::read(uint64_t address, void* dst, size_t size) const {
     return memory_.read(address, dst, size);
 }
 
-MemoryResult MemoryManager::write(uint64_t address, const void* src, size_t size) {
+MemoryStatus MemoryManager::write(uint64_t address, const void* src, size_t size) {
     return memory_.write(address, src, size);
 }
 
-MemoryResult MemoryManager::protect(uint64_t address, size_t size, Protection protection) {
+MemoryStatus MemoryManager::protect(uint64_t address, size_t size, Protection protection) {
 
     const MemoryRegion* region = findRegion(address);
     if (!region) {
-        return { .status = MemoryStatus::NotReserved };
+        return MemoryStatus::NotReserved;
     }
 
     if (size > UINT64_MAX - address) {
-        return { .status = MemoryStatus::AddressOverflow };
+        return MemoryStatus::AddressOverflow;
     }
     
     uint64_t requestedEnd = address + size;
     uint64_t regionEnd = region->base + region->size;
 
     if (requestedEnd > regionEnd) {
-        return { .status = MemoryStatus::RangeCrossesRegion };
+        return MemoryStatus::RangeCrossesRegion;
     }
 
     if (size == 0) {
-        return MemoryResult{
-            .status = MemoryStatus::Success,
-        };
+        return MemoryStatus::Success;
     }
 
     auto end = alignUp(address + size, PAGE_SIZE);
     
     if (!end) {
-        return MemoryResult{
-            .status = MemoryStatus::AddressOverflow
-        };
+        return MemoryStatus::AddressOverflow;
     }
 
     uint64_t start = alignDown(address, PAGE_SIZE);
@@ -345,16 +341,10 @@ MemoryResult MemoryManager::protect(uint64_t address, size_t size, Protection pr
         MemoryStatus status = memory_.ProtectPage(page, protection);
 
         if (status != MemoryStatus::Success) {
-            return MemoryResult{
-                .status = status,
-                .bytesTransferred = page - start
-            };
+            return status;
         }
     }
 
-    return MemoryResult{
-        .status = MemoryStatus::Success,
-        .bytesTransferred = size
-    };
+    return MemoryStatus::Success;
 
 }

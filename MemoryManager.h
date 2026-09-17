@@ -40,9 +40,9 @@ public:
 
 	std::optional<MemoryInfo> query(uint64_t address) const;
 
-	MemoryResult read(uint64_t address, void* dst, size_t size) const;
-	MemoryResult write(uint64_t address, const void* src, size_t size);
-	MemoryResult protect(uint64_t address, size_t size, Protection protection);
+	MemoryStatus read(uint64_t address, void* dst, size_t size) const;
+	MemoryStatus write(uint64_t address, const void* src, size_t size);
+	MemoryStatus protect(uint64_t address, size_t size, Protection protection);
 
 private:
 	const MemoryRegion* findRegion(uint64_t address) const;
