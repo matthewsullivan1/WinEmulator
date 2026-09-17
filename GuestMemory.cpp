@@ -46,22 +46,20 @@ MemoryStatus GuestMemory::ProtectPage(uint64_t pageBase, Protection protection) 
 	return MemoryStatus::Success;
 }
 
-MemoryResult GuestMemory::read(uint64_t address, void* dst, size_t size) const {
+MemoryStatus GuestMemory::read(uint64_t address, void* dst, size_t size) const {
 	if (!dst) {
-		return MemoryResult{ .status = MemoryStatus::InvalidAddress };
+		return MemoryStatus::InvalidAddress;
 	}
 	
 	MemoryStatus status = validateRange(address, size, AccessType::Read);
 	if (status != MemoryStatus::Success) {
-		return MemoryResult{ .status = status };
+		return status;
 	}
 
 	auto* out = static_cast<uint8_t*>(dst);
 
 	size_t remaining = size;
 	uint64_t currentAddr = address;
-
-	MemoryResult m{};
 
 	while (remaining > 0) {
 		uint64_t pageBase = alignDown(currentAddr, PAGE_SIZE);
@@ -72,24 +70,22 @@ MemoryResult GuestMemory::read(uint64_t address, void* dst, size_t size) const {
 
 		std::memcpy(out, page.data.data() + offset, bytesToCopy);
 
-		m.bytesTransferred += bytesToCopy;
 		out += bytesToCopy;
 		currentAddr += bytesToCopy;
 		remaining -= bytesToCopy;
 	}
 
-	m.status = MemoryStatus::Success;
-	return m;
+	return MemoryStatus::Success;
 }
 
-MemoryResult GuestMemory::write(uint64_t address, const void* src, size_t size) {
+MemoryStatus GuestMemory::write(uint64_t address, const void* src, size_t size) {
 	if (!src) {
-		return MemoryResult{ .status = MemoryStatus::InvalidAddress };
+		return MemoryStatus::InvalidAddress;
 	}
 
 	MemoryStatus status = validateRange(address, size, AccessType::Write);
 	if (status != MemoryStatus::Success) {
-		return MemoryResult{ .status = status };
+		return MemoryStatus::InvalidAddress;
 	}
 
 	const auto* in = static_cast<const uint8_t*>(src);
@@ -97,7 +93,7 @@ MemoryResult GuestMemory::write(uint64_t address, const void* src, size_t size) 
 	size_t remaining = size;
 	uint64_t currentAddr = address;
 
-	MemoryResult m{};
+
 
 	while (remaining > 0) {
 		uint64_t pageBase = alignDown(currentAddr, PAGE_SIZE);
@@ -108,14 +104,12 @@ MemoryResult GuestMemory::write(uint64_t address, const void* src, size_t size) 
 		
 		memcpy(page.data.data() + offset, in, bytesToCopy);
 
-		m.bytesTransferred += bytesToCopy;
 		in += bytesToCopy;
 		currentAddr += bytesToCopy;
 		remaining -= bytesToCopy;
 	}
 
-	m.status = MemoryStatus::Success;
-	return m;
+	return MemoryStatus::Success;
 }
 
 MemoryStatus GuestMemory::validateRange(uint64_t address, size_t size, AccessType access) const {

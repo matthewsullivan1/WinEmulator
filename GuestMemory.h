@@ -11,8 +11,8 @@ public:
 	MemoryStatus unmapPage(uint64_t pageBase);
 	MemoryStatus ProtectPage(uint64_t address, Protection protection);
 	
-	MemoryResult read(uint64_t address, void* dst, size_t size) const; 
-	MemoryResult write(uint64_t address, const void* src, size_t size); 
+	MemoryStatus read(uint64_t address, void* dst, size_t size) const;
+	MemoryStatus write(uint64_t address, const void* src, size_t size);
 
 	const Page* findPage(uint64_t address) const;
 
