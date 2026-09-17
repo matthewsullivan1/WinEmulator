@@ -13,28 +13,30 @@ class MemoryManager {
 public:
 	explicit MemoryManager(GuestMemory& memory) : memory_(memory) {}
 
-	std::expected<uint64_t, MemoryStatus> reserve(
+	MemoryStatus reserve(
 		uint64_t preferredAddress, 
 		size_t size, 
-		RegionType type);
+		RegionType type,
+		uint64_t* baseOut = nullptr);
 
-	std::expected<uint64_t, MemoryStatus> commit(
+	MemoryStatus commit(
 		uint64_t address, 
 		size_t size, 
 		Protection protection);
 
-	std::expected<void, MemoryStatus> decommit(
+	MemoryStatus decommit(
 		uint64_t address, 
 		size_t size);
 
-	std::expected<void, MemoryStatus> release(
+	MemoryStatus release(
 		uint64_t address);
 
-	std::expected<uint64_t, MemoryStatus> allocate(
+	MemoryStatus allocate(
 		uint64_t preferredAddress, 
 		size_t size, 
 		Protection protection, 
-		RegionType type);
+		RegionType type,
+		uint64_t* baseOut = nullptr);
 
 	std::optional<MemoryInfo> query(uint64_t address) const;
 

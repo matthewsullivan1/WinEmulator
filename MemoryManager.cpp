@@ -1,15 +1,15 @@
 #include "MemoryManager.h"
 
 
-std::expected<uint64_t, MemoryStatus> MemoryManager::reserve(uint64_t preferredAddress, size_t size, RegionType type) {
+MemoryStatus MemoryManager::reserve(uint64_t preferredAddress, size_t size, RegionType type, uint64_t* baseOut) {
 
     if (size == 0) {
-        return std::unexpected(MemoryStatus::InvalidSize);
+        return MemoryStatus::InvalidSize;
     }
 
     auto alignedSizeOpt = alignUp(size, PAGE_SIZE);
     if (!alignedSizeOpt) {
-        return std::unexpected(MemoryStatus::AddressOverflow);
+        return MemoryStatus::AddressOverflow;
     }
 
     size = *alignedSizeOpt;
@@ -20,7 +20,7 @@ std::expected<uint64_t, MemoryStatus> MemoryManager::reserve(uint64_t preferredA
         auto addressOpt = findFreeAddress(size);
         
         if (!addressOpt) {
-            return std::unexpected<MemoryStatus>(MemoryStatus::AddressOverflow); // Need to update with more informative error since this case prob wont happen often
+            return MemoryStatus::NoFreeAddress;
         }
 
         address = *addressOpt;
@@ -28,11 +28,11 @@ std::expected<uint64_t, MemoryStatus> MemoryManager::reserve(uint64_t preferredA
     else {
 
         if ((preferredAddress % ALLOCATION_GRANULARITY) != 0) {
-            return std::unexpected(MemoryStatus::MisalignedAddress);
+            return MemoryStatus::MisalignedAddress;
         }
 
         if (size > UINT64_MAX - preferredAddress) {
-            return std::unexpected<MemoryStatus>(MemoryStatus::AddressOverflow);
+            return MemoryStatus::AddressOverflow;
         }
 
         address = preferredAddress;
@@ -40,12 +40,12 @@ std::expected<uint64_t, MemoryStatus> MemoryManager::reserve(uint64_t preferredA
 
     uint64_t end = address + size;
 
-    for (const auto& [base, region] : regions_) {
+    for (const auto& [_, region] : regions_) {
 
         uint64_t regionEnd = region.base + region.size;
 
         if (address < regionEnd && region.base < end) {
-            return std::unexpected(MemoryStatus::AlreadyReserved);
+            return MemoryStatus::AlreadyReserved;
         }
     }
 
@@ -57,45 +57,48 @@ std::expected<uint64_t, MemoryStatus> MemoryManager::reserve(uint64_t preferredA
             .type = type
         }
     );
+    if (baseOut != nullptr) {
+        *baseOut = address;
+    }
 
-    return address; 
+    return MemoryStatus::Success; 
 }
 
-std::expected<uint64_t, MemoryStatus> MemoryManager::commit(uint64_t address, size_t size, Protection protection) {
+MemoryStatus MemoryManager::commit(uint64_t address, size_t size, Protection protection) {
     
     if (size == 0) {
-        return std::unexpected(MemoryStatus::InvalidSize);
+        return (MemoryStatus::InvalidSize);
     }
 
     if (size > UINT64_MAX - address) {
-        return std::unexpected(MemoryStatus::AddressOverflow);
+        return (MemoryStatus::AddressOverflow);
     }
     
     uint64_t requestedEnd = address + size;
     const MemoryRegion* region = findRegion(address);
 
     if (!region) {
-        return std::unexpected(MemoryStatus::NotReserved);
+        return (MemoryStatus::NotReserved);
     }
 
     uint64_t regionEnd = region->size + region->base;
 
     if (requestedEnd > regionEnd) {
-        return std::unexpected(MemoryStatus::RangeCrossesRegion);
+        return (MemoryStatus::RangeCrossesRegion);
     }
 
     uint64_t commitBase = alignDown(address, PAGE_SIZE);
     auto commitEndOpt = alignUp(requestedEnd, PAGE_SIZE);
 
     if (!commitEndOpt) {
-        return std::unexpected(MemoryStatus::AddressOverflow);
+        return (MemoryStatus::AddressOverflow);
     }
 
     uint64_t commitEnd = *commitEndOpt;
 
     for (uint64_t page = commitBase; page < commitEnd; page += PAGE_SIZE) {
         if (memory_.findPage(page)) {
-            return std::unexpected(MemoryStatus::AlreadyCommitted);
+            return (MemoryStatus::AlreadyCommitted);
         }
     }
 
@@ -103,41 +106,41 @@ std::expected<uint64_t, MemoryStatus> MemoryManager::commit(uint64_t address, si
         MemoryStatus status = memory_.mapPage(page, protection);
 
         if (status != MemoryStatus::Success) {
-            return std::unexpected(status);
+            return (status);
         }
     }
 
-    return commitBase;
+    return MemoryStatus::Success;
 }
 
-std::expected<void, MemoryStatus> MemoryManager::decommit(uint64_t address, size_t size) {
+MemoryStatus MemoryManager::decommit(uint64_t address, size_t size) {
 
     if (size == 0) {
-        return std::unexpected(MemoryStatus::InvalidSize);
+        return (MemoryStatus::InvalidSize);
     }
 
     if (size > UINT64_MAX - address) {
-        return std::unexpected(MemoryStatus::AddressOverflow);
+        return (MemoryStatus::AddressOverflow);
     }
 
     uint64_t requestedEnd = address + size;
     const MemoryRegion* region = findRegion(address);
 
     if (!region) {
-        return std::unexpected(MemoryStatus::NotReserved);
+        return (MemoryStatus::NotReserved);
     }
 
     uint64_t regionEnd = region->size + region->base;
 
     if (requestedEnd > regionEnd) {
-        return std::unexpected(MemoryStatus::RangeCrossesRegion);
+        return (MemoryStatus::RangeCrossesRegion);
     }
 
     uint64_t decommitBase = alignDown(address, PAGE_SIZE);
 
     for (uint64_t page = decommitBase; page < requestedEnd; page += PAGE_SIZE) {
         if (!memory_.findPage(page)) {
-            return std::unexpected(MemoryStatus::NotCommitted);
+            return (MemoryStatus::NotCommitted);
         }
     }
 
@@ -145,18 +148,18 @@ std::expected<void, MemoryStatus> MemoryManager::decommit(uint64_t address, size
         MemoryStatus status = memory_.unmapPage(page);
 
         if (status != MemoryStatus::Success) {
-            return std::unexpected(status);
+            return (status);
         }
     }
 
-    return {};
+    return MemoryStatus::Success;
 }
 
-std::expected<void, MemoryStatus> MemoryManager::release(uint64_t address) {
+MemoryStatus MemoryManager::release(uint64_t address) {
     auto it = regions_.find(address);
 
     if (it == regions_.end()) {
-        return std::unexpected(MemoryStatus::InvalidRelease);
+        return (MemoryStatus::InvalidRelease);
     }
 
     const MemoryRegion& region = it->second;
@@ -167,33 +170,38 @@ std::expected<void, MemoryStatus> MemoryManager::release(uint64_t address) {
             MemoryStatus status = memory_.unmapPage(page);
 
             if (status != MemoryStatus::Success) {
-                return std::unexpected(status);
+                return (status);
             }
         }
     }
 
     regions_.erase(it);
 
-    return {};
+    return MemoryStatus::Success;
 }
 
-std::expected<uint64_t, MemoryStatus> MemoryManager::allocate(uint64_t preferredAddress, size_t size, Protection protection, RegionType type) {
+MemoryStatus MemoryManager::allocate(uint64_t preferredAddress, size_t size, Protection protection, RegionType type, uint64_t* baseOut) {
 
-    auto reserveBaseExp = reserve(preferredAddress, size, type);
+    uint64_t base = 0;
+    MemoryStatus status = reserve(preferredAddress, size, type, &base);
 
-    if (!reserveBaseExp.has_value()) {
-        return std::unexpected(reserveBaseExp.error());
+    if (status != MemoryStatus::Success) {
+        return status;
     }
 
-    uint64_t reserveBase = reserveBaseExp.value();
-    auto commitBaseExp = commit(reserveBase, size, protection);
+    status = commit(base, size, protection);
 
-    if (!commitBaseExp.has_value()) {
-        release(reserveBase);
-        return std::unexpected(commitBaseExp.error());
+    if (status != MemoryStatus::Success) {
+        release(base);
+        return status;
     }
 
-    return reserveBase;
+    if (baseOut != nullptr) {
+        *baseOut = base;
+        return MemoryStatus::Success;
+    }
+
+    return MemoryStatus::Success;
 }
 
 const MemoryRegion* MemoryManager::findRegion(uint64_t address) const {
