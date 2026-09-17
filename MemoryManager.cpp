@@ -67,7 +67,7 @@ MemoryStatus MemoryManager::reserve(uint64_t preferredAddress, size_t size, Regi
 MemoryStatus MemoryManager::commit(uint64_t address, size_t size, Protection protection) {
     
     if (size == 0) {
-        return (MemoryStatus::InvalidSize);
+        return (MemoryStatus::Success);
     }
 
     if (size > UINT64_MAX - address) {
@@ -116,7 +116,7 @@ MemoryStatus MemoryManager::commit(uint64_t address, size_t size, Protection pro
 MemoryStatus MemoryManager::decommit(uint64_t address, size_t size) {
 
     if (size == 0) {
-        return (MemoryStatus::InvalidSize);
+        return (MemoryStatus::Success);
     }
 
     if (size > UINT64_MAX - address) {
@@ -137,14 +137,20 @@ MemoryStatus MemoryManager::decommit(uint64_t address, size_t size) {
     }
 
     uint64_t decommitBase = alignDown(address, PAGE_SIZE);
+    auto decommitEndOpt = alignUp(requestedEnd, PAGE_SIZE);
+    if (!decommitEndOpt) {
+        return MemoryStatus::AddressOverflow;
+    }
 
-    for (uint64_t page = decommitBase; page < requestedEnd; page += PAGE_SIZE) {
+    uint64_t decommitEnd = *decommitEndOpt;
+
+    for (uint64_t page = decommitBase; page < decommitEnd; page += PAGE_SIZE) {
         if (!memory_.findPage(page)) {
             return (MemoryStatus::NotCommitted);
         }
     }
 
-    for (uint64_t page = decommitBase; page < requestedEnd; page += PAGE_SIZE) {
+    for (uint64_t page = decommitBase; page < decommitEnd; page += PAGE_SIZE) {
         MemoryStatus status = memory_.unmapPage(page);
 
         if (status != MemoryStatus::Success) {
@@ -302,9 +308,25 @@ MemoryResult MemoryManager::write(uint64_t address, const void* src, size_t size
 
 MemoryResult MemoryManager::protect(uint64_t address, size_t size, Protection protection) {
 
+    const MemoryRegion* region = findRegion(address);
+    if (!region) {
+        return { .status = MemoryStatus::NotReserved };
+    }
+
+    if (size > UINT64_MAX - address) {
+        return { .status = MemoryStatus::AddressOverflow };
+    }
+    
+    uint64_t requestedEnd = address + size;
+    uint64_t regionEnd = region->base + region->size;
+
+    if (requestedEnd > regionEnd) {
+        return { .status = MemoryStatus::RangeCrossesRegion };
+    }
+
     if (size == 0) {
         return MemoryResult{
-            .status = MemoryStatus::InvalidSize,
+            .status = MemoryStatus::Success,
         };
     }
 
@@ -325,7 +347,7 @@ MemoryResult MemoryManager::protect(uint64_t address, size_t size, Protection pr
         if (status != MemoryStatus::Success) {
             return MemoryResult{
                 .status = status,
-                .bytesTransferred = start - page
+                .bytesTransferred = page - start
             };
         }
     }
