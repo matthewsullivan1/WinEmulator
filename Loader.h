@@ -1,13 +1,34 @@
 // Loader.h
 #pragma once
 
-#include "MemoryManager.h"
 #include "PEFile.h"
+#include "Process.h"
 #include <string.h>
 
-enum class ImageType {
-    Executable,
-    DLL
+#include "Module.h"
+
+enum class LoaderStatus {
+    Success,
+
+    InvalidImage,
+    InvalidImageContext,
+
+    ImageReservationFailed,
+
+    ImageHeaderMapFailed,
+    ImageSectionMapFailed,
+
+    ImageHeaderCommitFailed,
+    ImageSectionCommitFailed,
+
+    ImageRelocationFailed,
+    MalformedBaseRelocationDirectory,
+    UnsupportedRelocationType,
+
+    ImportDescriptorError,
+
+
+    Other
 };
 
 struct ImageContext {
@@ -19,37 +40,17 @@ struct ImageContext {
     ImageType type = ImageType::Executable;
 };
 
-enum class LoaderStatus {
-    Success,
-
-    InvalidImage,
-    InvalidImageContext,
-
-    ImageReservationFailed,
-    
-    ImageHeaderMapFailed,
-    ImageSectionMapFailed,
-
-    ImageHeaderCommitFailed,
-    ImageSectionCommitFailed,
-
-    ImageRelocationFailed,
-
-    
-    Other
-};
-
 
 class Loader {
 public:
-	explicit Loader(MemoryManager& mm) : mm_(mm) {};
+	explicit Loader(Process& process) : process_(process) {};
 
     LoaderStatus mapImage(PEFile& pe, ImageContext* ctx);
     LoaderStatus relocateImage(ImageContext* ctx);
     LoaderStatus resolveImageImports(ImageContext* ctx);
 
 private:
-	MemoryManager& mm_;
+    Process& process_; 
 };
 
 
