@@ -44,6 +44,12 @@ public:
 	MemoryStatus write(uint64_t address, const void* src, size_t size);
 	MemoryStatus protect(uint64_t address, size_t size, Protection protection);
 
+	MemoryStatus readString(
+		uint64_t address,
+		std::string& out,
+		size_t maxLen
+	) const;
+
 private:
 	const MemoryRegion* findRegion(uint64_t address) const;
 	std::optional<uint64_t> findFreeAddress(size_t size) const;
