@@ -348,3 +348,29 @@ MemoryStatus MemoryManager::protect(uint64_t address, size_t size, Protection pr
     return MemoryStatus::Success;
 
 }
+
+MemoryStatus MemoryManager::readString(uint64_t address, std::string& out, size_t maxLength) const {
+    out.clear();
+
+    for (size_t i = 0; i < maxLength; ++i) {
+        char c;
+
+        MemoryStatus status = read(
+            address + i,
+            &c,
+            sizeof(c)
+        );
+
+        if (status != MemoryStatus::Success) {
+            return status;
+        }
+
+        if (c == '\0') {
+            return MemoryStatus::Success;
+        }
+
+        out.push_back(c);
+    }
+
+    return MemoryStatus::InvalidSize;
+}
