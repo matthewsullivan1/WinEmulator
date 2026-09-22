@@ -85,7 +85,7 @@ MemoryStatus GuestMemory::write(uint64_t address, const void* src, size_t size) 
 
 	MemoryStatus status = validateRange(address, size, AccessType::Write);
 	if (status != MemoryStatus::Success) {
-		return MemoryStatus::InvalidAddress;
+		return status;
 	}
 
 	const auto* in = static_cast<const uint8_t*>(src);
