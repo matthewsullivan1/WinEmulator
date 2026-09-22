@@ -2,38 +2,41 @@
 
 #include "Process.h"
 
-Module* Process::findModule(std::string name) {
+ImageContext* Process::findImage(std::string name) {
 	
-	auto it = modules_.find(name);
+	auto it = images_.find(name);
 
-	if (it == modules_.end()) {
+	if (it == images_.end()) {
 		return nullptr;
 	}
 
 	return &it->second;
 }
 
-const Module* Process::findModule(std::string name) const {
+const ImageContext* Process::findImage(std::string name) const {
 
-	const auto it = modules_.find(name);
+	const auto it = images_.find(name);
 
-	if (it == modules_.end()) {
+	if (it == images_.end()) {
 		return nullptr;
 	}
 
 	return &it->second;
 }
 
-Module& Process::addModule(Module module) {
+ImageContext* Process::addImage(std::string name) {
 
-	const auto it = modules_.find(module.name);
+	auto [it, inserted] = images_.try_emplace(
+		name,
+		ImageContext{
+			.name = name,
+		}
+		);
 
-	if (it != modules_.end()) {
-		return module;
-	}
+	return &it->second;
+}
 
-	modules_.emplace(module.name, module);
-
-	return module;
+void Process::setMainImage(ImageContext* ctx) {
+	mainImage_ = ctx;
 }
 

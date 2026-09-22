@@ -3,7 +3,7 @@
 
 #include "MemoryManager.h"
 #include "GuestMemory.h"
-#include "Module.h"
+#include "ImageContext.h"
 
 class Process {
 public:
@@ -17,14 +17,20 @@ public:
 		return memoryManager_;
 	}
 
-	Module* findModule(std::string name);
+	ImageContext* findImage(std::string name);
 
-	const Module* findModule(std::string name) const;
+	const ImageContext* findImage(std::string name) const;
 	
-	Module& addModule(Module module);
+	ImageContext* addImage(std::string name);
+
+	void setMainImage(ImageContext* ctx);
+
+	ImageContext* mainImage() { return mainImage_; }
 
 private:
 	GuestMemory memory_;
 	MemoryManager memoryManager_;
-	std::unordered_map<std::string, Module> modules_;
+	ImageContext* mainImage_ = nullptr;
+	std::unordered_map<std::string, ImageContext> images_;
 };
+
