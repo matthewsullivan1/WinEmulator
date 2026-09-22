@@ -5,7 +5,7 @@
 #include "Process.h"
 #include <string.h>
 
-#include "Module.h"
+#include "ImageContext.h"
 
 enum class LoaderStatus {
     Success,
@@ -26,18 +26,12 @@ enum class LoaderStatus {
     UnsupportedRelocationType,
 
     ImportDescriptorError,
+    FailedToLocateImage,
 
+    ApiSetResolutionFailed,
+    ExportNotFound,
 
     Other
-};
-
-struct ImageContext {
-    uint64_t baseAddress = 0;
-    uint64_t preferredBase = 0;
-    uint64_t entryPoint = 0;
-    size_t size = 0;
-
-    ImageType type = ImageType::Executable;
 };
 
 
@@ -48,6 +42,14 @@ public:
     LoaderStatus mapImage(PEFile& pe, ImageContext* ctx);
     LoaderStatus relocateImage(ImageContext* ctx);
     LoaderStatus resolveImageImports(ImageContext* ctx);
+    std::optional<std::filesystem::path> findImagePath(const std::string& name);
+
+    LoaderStatus loadImage(PEFile& pe, ImageContext* ctx);
+    LoaderStatus loadExecutable(std::filesystem::path path);
+    LoaderStatus loadModule(const std::string& name, ImageContext** ctxOut);
+
+    LoaderStatus resolveProcAddress(uint64_t hmodule, std::string name, uint64_t* addrOut);
+    
 
 private:
     Process& process_; 
