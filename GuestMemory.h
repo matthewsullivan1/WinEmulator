@@ -7,9 +7,9 @@
 
 class GuestMemory {
 public:
-	MemoryStatus mapPage(uint64_t pageBase, Protection protection);
+	MemoryStatus mapPage(uint64_t pageBase, PageProtection protection);
 	MemoryStatus unmapPage(uint64_t pageBase);
-	MemoryStatus ProtectPage(uint64_t address, Protection protection);
+	MemoryStatus ProtectPage(uint64_t address, PageProtection protection);
 	
 	MemoryStatus read(uint64_t address, void* dst, size_t size) const;
 	MemoryStatus write(uint64_t address, const void* src, size_t size);

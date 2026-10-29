@@ -23,7 +23,7 @@ public:
 	MemoryStatus commit(
 		uint64_t address, 
 		size_t size, 
-		Protection protection);
+		PageProtection protection);
 
 	MemoryStatus decommit(
 		uint64_t address, 
@@ -35,15 +35,27 @@ public:
 	MemoryStatus allocate(
 		uint64_t preferredAddress, 
 		size_t size, 
-		Protection protection, 
+		PageProtection protection,
 		RegionType type,
 		uint64_t* baseOut = nullptr);
 
 	std::optional<MemoryInfo> query(uint64_t address) const;
 
-	MemoryStatus read(uint64_t address, void* dst, size_t size) const;
-	MemoryStatus write(uint64_t address, const void* src, size_t size);
-	MemoryStatus protect(uint64_t address, size_t size, Protection protection);
+	MemoryStatus read(
+		uint64_t address, 
+		void* dst, 
+		size_t size) const;
+
+	MemoryStatus write(
+		uint64_t address, 
+		const void* src, 
+		size_t size);
+
+	MemoryStatus protect(
+		uint64_t address, 
+		size_t size, 
+		PageProtection newProtect, 
+		PageProtection* oldProtect = nullptr);
 
 	MemoryStatus readString(
 		uint64_t address,

@@ -59,8 +59,20 @@ enum class MemoryStatus {
     RangeCrossesRegion,
 
     ProtectionViolation,
+    AccessViolation,
     RegionNotFound,
     InvalidRelease
+};
+
+enum class PageProtection {
+    NoAccess = 0x01,
+    ReadOnly = 0x02,
+    ReadWrite = 0x04,
+    WriteCopy = 0x08,
+    Execute = 0x10,
+    ExecuteRead = 0x20,
+    ExecuteReadWrite = 0x40,
+    ExecuteWriteCopy = 0x80
 };
 
 struct Protection {
@@ -69,9 +81,11 @@ struct Protection {
     bool x = false;
 };
 
+
+
 struct Page {
     std::array<uint8_t, PAGE_SIZE> data{};
-    Protection protection{};
+    PageProtection protection = PageProtection::NoAccess;
 };
 
 struct PageChunk {
@@ -92,7 +106,7 @@ struct MemoryInfo {
     size_t regionSize;
 
     PageState state;
-    Protection protection;
+    PageProtection protection;
     RegionType type;
 };
 
@@ -114,4 +128,51 @@ inline PageChunk getPageChunk(uint64_t address, size_t remaining) {
         .offset = offset,
         .size = (((remaining) < (PAGE_SIZE - offset)) ? (remaining) : (PAGE_SIZE - offset))
     };
+}
+
+constexpr bool canRead(PageProtection protection) noexcept {
+    auto base = static_cast<PageProtection>(static_cast<uint32_t>(protection) & 0xFF);
+
+    switch (base) {
+    case PageProtection::ReadOnly:
+    case PageProtection::ReadWrite:
+    case PageProtection::WriteCopy:
+    case PageProtection::ExecuteRead:
+    case PageProtection::ExecuteReadWrite:
+    case PageProtection::ExecuteWriteCopy:
+        return true;
+
+    default:
+        return false;
+    }
+}
+
+constexpr bool canWrite(PageProtection protection) noexcept {
+    auto base = static_cast<PageProtection>(static_cast<uint32_t>(protection) & 0xFF);
+
+    switch (base) {
+    case PageProtection::ReadWrite:
+    case PageProtection::WriteCopy:
+    case PageProtection::ExecuteReadWrite:
+    case PageProtection::ExecuteWriteCopy:
+        return true;
+
+    default:
+        return false;
+    }
+}
+
+constexpr bool canExecute(PageProtection protection) noexcept {
+    auto base = static_cast<PageProtection>(static_cast<uint32_t>(protection) & 0xFF);
+
+    switch (base) {
+    case PageProtection::Execute:
+    case PageProtection::ExecuteRead:
+    case PageProtection::ExecuteReadWrite:
+    case PageProtection::ExecuteWriteCopy:
+        return true;
+
+    default:
+        return false;
+    }
 }

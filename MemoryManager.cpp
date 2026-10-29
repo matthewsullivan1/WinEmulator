@@ -64,7 +64,7 @@ MemoryStatus MemoryManager::reserve(uint64_t preferredAddress, size_t size, Regi
     return MemoryStatus::Success; 
 }
 
-MemoryStatus MemoryManager::commit(uint64_t address, size_t size, Protection protection) {
+MemoryStatus MemoryManager::commit(uint64_t address, size_t size, PageProtection protection) {
     
     if (size == 0) {
         return (MemoryStatus::Success);
@@ -186,7 +186,7 @@ MemoryStatus MemoryManager::release(uint64_t address) {
     return MemoryStatus::Success;
 }
 
-MemoryStatus MemoryManager::allocate(uint64_t preferredAddress, size_t size, Protection protection, RegionType type, uint64_t* baseOut) {
+MemoryStatus MemoryManager::allocate(uint64_t preferredAddress, size_t size, PageProtection protection, RegionType type, uint64_t* baseOut) {
 
     uint64_t base = 0;
     MemoryStatus status = reserve(preferredAddress, size, type, &base);
@@ -248,7 +248,7 @@ std::optional<MemoryInfo> MemoryManager::query(uint64_t address) const {
         .pageBase = pageBase,
         .regionSize = region->size,
         .state = page ? PageState::Committed : PageState::Reserved,
-        .protection = page ? page->protection : Protection{},
+        .protection = page ? page->protection : PageProtection::NoAccess,
         .type = region->type
     };
 
@@ -306,7 +306,7 @@ MemoryStatus MemoryManager::write(uint64_t address, const void* src, size_t size
     return memory_.write(address, src, size);
 }
 
-MemoryStatus MemoryManager::protect(uint64_t address, size_t size, Protection protection) {
+MemoryStatus MemoryManager::protect(uint64_t address, size_t size, PageProtection newProtect, PageProtection* oldProtect) {
 
     const MemoryRegion* region = findRegion(address);
     if (!region) {
@@ -336,17 +336,28 @@ MemoryStatus MemoryManager::protect(uint64_t address, size_t size, Protection pr
 
     uint64_t start = alignDown(address, PAGE_SIZE);
 
-    // Note that this operation is not atomic. protection changes made before failure will persist
+    // Verify that all pages in requested range are committed
     for (uint64_t page = start; page < end; page += PAGE_SIZE) {
-        MemoryStatus status = memory_.ProtectPage(page, protection);
+        if (!memory_.findPage(page)) {
+            return MemoryStatus::NotCommitted;
+        }
+    }
+
+    PageProtection currentProtection = memory_.findPage(start)->protection;
+
+    for (uint64_t page = start; page < end; page += PAGE_SIZE) {
+        MemoryStatus status = memory_.ProtectPage(page, newProtect);
 
         if (status != MemoryStatus::Success) {
             return status;
         }
     }
 
-    return MemoryStatus::Success;
+    if (oldProtect) {
+        *oldProtect = currentProtection;
+    }
 
+    return MemoryStatus::Success;
 }
 
 MemoryStatus MemoryManager::readString(uint64_t address, std::string& out, size_t maxLength) const {

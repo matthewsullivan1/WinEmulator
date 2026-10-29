@@ -1,7 +1,7 @@
 // GuestMemory.cpp 
 #include "GuestMemory.h"
 
-MemoryStatus GuestMemory::mapPage(uint64_t pageBase, Protection protection) {
+MemoryStatus GuestMemory::mapPage(uint64_t pageBase, PageProtection protection) {
 	if (pageBase % PAGE_SIZE != 0) {
 		return MemoryStatus::MisalignedAddress;
 	}
@@ -32,7 +32,7 @@ MemoryStatus GuestMemory::unmapPage(uint64_t pageBase) {
 	return MemoryStatus::Success;
 }
 
-MemoryStatus GuestMemory::ProtectPage(uint64_t pageBase, Protection protection) {
+MemoryStatus GuestMemory::ProtectPage(uint64_t pageBase, PageProtection protection) {
 	if (pageBase % PAGE_SIZE != 0) {
 		return MemoryStatus::MisalignedAddress;
 	}
@@ -136,18 +136,18 @@ MemoryStatus GuestMemory::validateRange(uint64_t address, size_t size, AccessTyp
 
 		switch (access) {
 		case AccessType::Read:
-			if (!it->second.protection.r)
-				return MemoryStatus::ProtectionViolation;
+			if (!canRead(it->second.protection))
+				return MemoryStatus::AccessViolation;
 			break;
 
 		case AccessType::Write:
-			if (!it->second.protection.w)
-				return MemoryStatus::ProtectionViolation;
+			if (!canWrite(it->second.protection))
+				return MemoryStatus::AccessViolation;
 			break;
 
 		case AccessType::Execute:
-			if (!it->second.protection.x)
-				return MemoryStatus::ProtectionViolation;
+			if (!canExecute(it->second.protection))
+				return MemoryStatus::AccessViolation;
 			break;
 		}
 

@@ -8,9 +8,13 @@
 
 LoaderStatus Loader::mapImage(PEFile& pe, ImageContext* ctx) {
 	if (ctx == nullptr) {
-		std::cout << "InvalidImageContext: loader.mapImage()" << std::endl;
-
 		return LoaderStatus::InvalidImageContext;
+	}
+
+	uint32_t alignment = pe.optionalHeader()->SectionAlignment;
+
+	if (alignment != PAGE_SIZE || alignment % PAGE_SIZE != 0) {
+		return LoaderStatus::UnsupportedSectionAlignment;
 	}
 
 	// Reserve region for entire image
@@ -39,17 +43,11 @@ LoaderStatus Loader::mapImage(PEFile& pe, ImageContext* ctx) {
 		return LoaderStatus::ImageReservationFailed;
 	}
 
-	std::cout << "[+] Image reservation at " << imageBase << std::endl;
-
 	// Commit header subregion
 	status = process_.memory().commit(
 		imageBase,
 		pe.ntHeaders()->OptionalHeader.SizeOfHeaders,
-		Protection{
-			.r = true,
-			.w = true,
-			.x = false
-		}
+		PageProtection::ReadWrite
 	);
 	
 	if (status != MemoryStatus::Success) {
@@ -76,9 +74,12 @@ LoaderStatus Loader::mapImage(PEFile& pe, ImageContext* ctx) {
 	auto fileData = pe.data();
 
 	for (const auto& section : pe.sections()) {
+
+		if (section.VirtualAddress % pe.optionalHeader()->SectionAlignment != 0) {
+			return LoaderStatus::InvalidSectionAlignment;
+		}
 		
 		uint64_t sectionDst = imageBase + section.VirtualAddress;
-		//std::cout << "[+] Writing section at " << sectionDst << std::endl;
 
 		auto sectionData = fileData.subspan(
 			section.PointerToRawData,
@@ -93,11 +94,7 @@ LoaderStatus Loader::mapImage(PEFile& pe, ImageContext* ctx) {
 		status = process_.memory().commit(
 			sectionDst,
 			mappedSize,
-			Protection{
-				.r = true,
-				.w = true,
-				.x = false
-			}
+			PageProtection::ReadWrite
 		);
 
 		if (status != MemoryStatus::Success) {
@@ -138,8 +135,6 @@ LoaderStatus Loader::relocateImage(ImageContext* ctx) {
 	if (ctx->baseAddress == ctx->preferredBase) {
 		return LoaderStatus::Success;
 	}
-
-	std::cout << "Relocating image at " << std::hex << ctx->baseAddress << "(" << std::hex << ctx->preferredBase << ")" << std::endl;
 
 	IMAGE_DOS_HEADER dos;
 	MemoryStatus status = process_.memory().read(
@@ -242,7 +237,11 @@ LoaderStatus Loader::relocateImage(ImageContext* ctx) {
 
 	}
 
-	std::cout << " [+] Image at " << std::hex << ctx->baseAddress << " relocated" << std::endl;
+	std::cout
+		<< "[RELOC] " << ctx->name
+		<< " 0x" << std::hex << ctx->preferredBase
+		<< " -> 0x" << ctx->baseAddress
+		<< std::dec << '\n';
 
 	return LoaderStatus::Success;
 }
@@ -250,7 +249,6 @@ LoaderStatus Loader::relocateImage(ImageContext* ctx) {
 LoaderStatus Loader::resolveImageImports(ImageContext* ctx) {
 	
 	if (ctx == nullptr) {
-		std::cout << "InvalidImageContext: loader.resolveImageImports" << std::endl;
 		return LoaderStatus::InvalidImageContext;
 	}
 
@@ -307,48 +305,74 @@ LoaderStatus Loader::resolveImageImports(ImageContext* ctx) {
 
 		if (status != MemoryStatus::Success) {
 
-			std::cout << "ImportDescriptorError in Loader.ResolveImageImports (MemoryManager.ReadString)" << std::endl;
+			std::cout
+				<< "[ERROR] Failed to read import module name\n"
+				<< "        image:  " << ctx->name << '\n'
+				<< "        status: " << static_cast<int>(status) << '\n';
 
 			return LoaderStatus::ImportDescriptorError;
 		}
 
-		
-
 		if (ApiSet::isContract(moduleName)) {
 
-			std::wstring wname(moduleName.begin(), moduleName.end());
+			std::string contractName = moduleName;
 
-			auto host = ApiSet::resolve(wname);
+			std::wstring wname(
+				moduleName.begin(),
+				moduleName.end()
+			);
+
+			std::wstring parentName(
+				ctx->name.begin(),
+				ctx->name.end()
+			);
+
+			auto host = ApiSet::resolve(
+				wname,
+				parentName
+			);
 
 			if (!host) {
-				std::cout << "Failed to resolve api set: " << moduleName << std::endl;
+				std::cout
+					<< "[ERROR] API-set resolution failed\n"
+					<< "        image:    " << ctx->name << '\n'
+					<< "        contract: " << contractName << '\n';
 
 				return LoaderStatus::ApiSetResolutionFailed;
 			}
 
 			moduleName = std::string(host->begin(), host->end());
-		}
-		
 
-		//std::cout << "[+] Import: " << name << std::endl;
+			std::cout
+				<< "[APISET] " << contractName
+				<< " -> " << moduleName << '\n';
+		}
 
 		ImageContext* pModule = process_.findImage(moduleName);
 
 		if (pModule == nullptr) {
 
-			//std::cout << " [+] Loading: "<< name << std::endl;
-
 			LoaderStatus imageStatus = loadModule(moduleName, &pModule);
 
 			if (imageStatus != LoaderStatus::Success) {
+				std::cout
+					<< "[ERROR] Failed to load dependency\n"
+					<< "        image:  " << ctx->name << '\n'
+					<< "        module: " << moduleName << '\n'
+					<< "        status: "
+					<< loaderStatusString(imageStatus) << '\n';
+
 				return imageStatus;
 			}
-
-			std::cout << " [+] Loaded module: " << moduleName << std::endl;
 		}
 
 		if (pModule == nullptr) {
-			return LoaderStatus::Other;
+			std::cout
+				<< "[ERROR] Module loaded without valid image context\n"
+				<< "        image:  " << ctx->name << '\n'
+				<< "        module: " << moduleName << '\n';
+
+			return LoaderStatus::InvalidModuleContext;
 		}
 
 		uint64_t hmodule = pModule->baseAddress;
@@ -367,7 +391,17 @@ LoaderStatus Loader::resolveImageImports(ImageContext* ctx) {
 				sizeof(IMAGE_THUNK_DATA64)
 			);
 
-			if (status != MemoryStatus::Success) { return LoaderStatus::Other; }
+			if (status != MemoryStatus::Success) { 
+				std::cout
+					<< "[ERROR] Failed to read import thunk\n"
+					<< "        image:  " << ctx->name << '\n'
+					<< "        module: " << moduleName << '\n'
+					<< "        thunk:  0x"
+					<< std::hex << pLookupThunk
+					<< std::dec << '\n';
+
+				return LoaderStatus::ImportThunkReadFailed;
+			}
 
 			if (thunk.u1.AddressOfData == 0) {
 				break;
@@ -378,9 +412,25 @@ LoaderStatus Loader::resolveImageImports(ImageContext* ctx) {
 			if (IMAGE_SNAP_BY_ORDINAL64(thunk.u1.Ordinal)) {
 				WORD ordinal = static_cast<WORD>(IMAGE_ORDINAL64(thunk.u1.Ordinal));
 
-				std::cout << "Ordinal import not implemented: " << ordinal << " from " << moduleName << std::endl;
+				LoaderStatus ldrStatus = resolveProcAddress(
+					hmodule,
+					ordinal,
+					&resolvedAddress
+				);
+
+				if (ldrStatus != LoaderStatus::Success) {
+					std::cout
+						<< "[ERROR] Ordinal import resolution failed\n"
+						<< "        image:   " << ctx->name << '\n'
+						<< "        module:  " << moduleName << '\n'
+						<< "        ordinal: " << ordinal << '\n'
+						<< "        status:  "
+						<< loaderStatusString(ldrStatus) << '\n';
+					
+					
+					return ldrStatus;
 				
-				return LoaderStatus::Other;
+				}
 			}
 			else {
 				
@@ -394,7 +444,15 @@ LoaderStatus Loader::resolveImageImports(ImageContext* ctx) {
 				);
 
 				if (status != MemoryStatus::Success) {
-					std::cout << "Error reading import name" << std::endl;
+					std::cout
+						<< "[ERROR] Failed to read import name\n"
+						<< "        image:   " << ctx->name << '\n'
+						<< "        module:  " << moduleName << '\n'
+						<< "        address: 0x"
+						<< std::hex << importByNameAddr
+						<< std::dec << '\n';
+
+					return LoaderStatus::ImportNameReadFailed;
 				}
 
 				LoaderStatus ldrStatus = resolveProcAddress(
@@ -404,7 +462,13 @@ LoaderStatus Loader::resolveImageImports(ImageContext* ctx) {
 				);
 
 				if (ldrStatus != LoaderStatus::Success) {
-					std::cout << "Error resolving " << functionName << " from " << moduleName << std::endl;
+					std::cout
+						<< "[ERROR] Import resolution failed\n"
+						<< "        image:    " << ctx->name << '\n'
+						<< "        module:   " << moduleName << '\n'
+						<< "        function: " << functionName << '\n'
+						<< "        status:   "
+						<< loaderStatusString(ldrStatus) << '\n';
 
 					return ldrStatus;
 				}
@@ -417,9 +481,15 @@ LoaderStatus Loader::resolveImageImports(ImageContext* ctx) {
 			);
 
 			if (status != MemoryStatus::Success) {
-				std::cout << "Error writing resolved address to IAT" << std::endl;
+				std::cout
+					<< "[ERROR] Failed to write IAT entry\n"
+					<< "        image:   " << ctx->name << '\n'
+					<< "        module:  " << moduleName << '\n'
+					<< "        address: 0x"
+					<< std::hex << pIatThunk
+					<< std::dec << '\n';
 
-				return LoaderStatus::Other;
+				return LoaderStatus::IatWriteFailed;
 			}
 
 			pLookupThunk += sizeof(IMAGE_THUNK_DATA64);
@@ -436,29 +506,49 @@ LoaderStatus Loader::resolveImageImports(ImageContext* ctx) {
 LoaderStatus Loader::loadImage(PEFile& pe, ImageContext* ctx) {
 
 	if (ctx == nullptr) {
-
-		std::cout << "InvalidImageContext at loader.loadImage()" << std::endl;
+		std::cout << "[ERROR] Invalid image context in loadImage()\n";
 		return LoaderStatus::InvalidImageContext;
 	}
+
+	std::cout
+		<< "[LOAD] " << ctx->name
+		<< '\n';
 
 	ctx->state = ImageState::Loading;
 
 	LoaderStatus status = mapImage(pe, ctx);
 	if (status != LoaderStatus::Success) {
+		std::cout
+			<< "[ERROR] Failed to map " << ctx->name
+			<< " (status " << loaderStatusString(status) << ")\n";
 		return status;
 	}
 
+	std::cout
+		<< "       base: 0x" << std::hex << ctx->baseAddress
+		<< std::dec << '\n';
+
 	status = relocateImage(ctx);
 	if (status != LoaderStatus::Success) {
+		std::cout
+			<< "[ERROR] Failed to relocate " << ctx->name
+			<< " (status " << loaderStatusString(status) << ")\n";
 		return status;
 	}
 
 	status = resolveImageImports(ctx);
 	if (status != LoaderStatus::Success) {
+		std::cout
+			<< "[ERROR] Failed imports for " << ctx->name
+			<< " (status " << loaderStatusString(status) << ")\n";
 		return status;
 	}
 
 	ctx->state = ImageState::Loaded;
+
+	std::cout
+		<< "[DONE] " << ctx->name
+		<< '\n';
 
 	return LoaderStatus::Success;
 }
@@ -469,8 +559,6 @@ LoaderStatus Loader::loadExecutable(std::filesystem::path path) {
 
 	ImageContext* ctx = process_.addImage(path.filename().string());
 	if (ctx == nullptr) {
-
-		std::cout << "InvalidImageContext at loader.loadExecutable" << std::endl;
 		return LoaderStatus::InvalidImageContext;
 	}
 
@@ -479,20 +567,12 @@ LoaderStatus Loader::loadExecutable(std::filesystem::path path) {
 
 	process_.setMainImage(ctx);
 
-
-	std::cout << "Added: " << ctx << '\n';
-	std::cout << "Found: "
-		<< process_.findImage(path.filename().string())
-		<< '\n';
-
 	return loadImage(image, ctx);
 }
 
 LoaderStatus Loader::loadModule(const std::string& name, ImageContext** ctxOut) {
 
 	if (ctxOut == nullptr) {
-
-		std::cout << "InvalidImageContext: loader.loadModule()" << std::endl;
 		return LoaderStatus::InvalidImageContext;
 	}
 	
@@ -505,10 +585,11 @@ LoaderStatus Loader::loadModule(const std::string& name, ImageContext** ctxOut) 
 
 	auto pathOpt = findImagePath(name);
 	if (!pathOpt) {
+		std::cout
+			<< "[ERROR] Failed to locate module\n"
+			<< "        module: " << name << '\n';
+
 		return LoaderStatus::FailedToLocateImage;
-	}
-	else {
-		std::cout << *pathOpt << std::endl;
 	}
 
 	PEFile image(*pathOpt);
@@ -558,17 +639,13 @@ std::optional<std::filesystem::path> Loader::findImagePath(const std::string& na
 		}
 	}
 
-	std::cout << "Image " << name << " not found" << std::endl;
-
 	return std::nullopt;
-
 
 }
 
-LoaderStatus Loader::resolveProcAddress(uint64_t hmodule, std::string name, uint64_t* addrOut) {
-
-	if (hmodule == 0 || name.empty() || addrOut == nullptr) {
-		return LoaderStatus::Other;
+LoaderStatus Loader::getExportContext(uint64_t hmodule, ExportContext& out) {
+	if (hmodule == 0) {
+		return LoaderStatus::InvalidImage;
 	}
 
 	IMAGE_DOS_HEADER dos;
@@ -576,11 +653,11 @@ LoaderStatus Loader::resolveProcAddress(uint64_t hmodule, std::string name, uint
 	MemoryStatus status = process_.memory().read(
 		hmodule,
 		&dos,
-		sizeof(IMAGE_DOS_HEADER)
+		sizeof(dos)
 	);
 
 	if (status != MemoryStatus::Success) {
-		return LoaderStatus::Other;
+		return LoaderStatus::ExportDirectoryReadFailed;
 	}
 
 	if (dos.e_magic != IMAGE_DOS_SIGNATURE) {
@@ -592,11 +669,11 @@ LoaderStatus Loader::resolveProcAddress(uint64_t hmodule, std::string name, uint
 	status = process_.memory().read(
 		hmodule + dos.e_lfanew,
 		&nt,
-		sizeof(IMAGE_NT_HEADERS64)
+		sizeof(nt)
 	);
 
 	if (status != MemoryStatus::Success) {
-		return LoaderStatus::Other;
+		return LoaderStatus::ExportDirectoryReadFailed;
 	}
 
 	if (nt.Signature != IMAGE_NT_SIGNATURE) {
@@ -605,101 +682,349 @@ LoaderStatus Loader::resolveProcAddress(uint64_t hmodule, std::string name, uint
 
 	const IMAGE_DATA_DIRECTORY& exportData = nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
 
-	DWORD exportDirRva = exportData.VirtualAddress;
-	DWORD exportDirSize = exportData.Size;
 
-	if (exportDirRva == 0 || exportDirSize == 0) {
-		return LoaderStatus::Other;
+	if (exportData.VirtualAddress == 0 || exportData.Size == 0) {
+		return LoaderStatus::ExportNotFound;
 	}
 
-	IMAGE_EXPORT_DIRECTORY exportDir{};
+	out.directoryRva = exportData.VirtualAddress;
+	out.directorySize = exportData.Size;
 
 	status = process_.memory().read(
-		hmodule + exportDirRva,
-		&exportDir,
-		sizeof(IMAGE_EXPORT_DIRECTORY)
+		hmodule + out.directoryRva,
+		&out.directory,
+		sizeof(out.directory)
 	);
 
 	if (status != MemoryStatus::Success) {
-		return LoaderStatus::Other;
+		return LoaderStatus::ExportDirectoryReadFailed;
 	}
 
-	uint64_t names = hmodule + exportDir.AddressOfNames;
-	uint64_t functions = hmodule + exportDir.AddressOfFunctions;
-	uint64_t ordinals = hmodule + exportDir.AddressOfNameOrdinals;
+	return LoaderStatus::Success;
+}
 
-	for (DWORD i = 0; i < exportDir.NumberOfNames; ++i) {
+LoaderStatus Loader::resolveProcAddress(uint64_t hmodule, const std::string& name, uint64_t* addrOut, size_t depth) {
+	
+	if (hmodule == 0 || name.empty() || addrOut == nullptr) {
+		return LoaderStatus::ExportTableReadFailed;
+	}
+
+	ExportContext exports;
+
+	LoaderStatus status = getExportContext(hmodule, exports);
+
+	if (status != LoaderStatus::Success) {
+		return status;
+	}
+
+	const IMAGE_EXPORT_DIRECTORY& dir = exports.directory;
+
+	uint64_t names = hmodule + dir.AddressOfNames;
+	uint64_t functions = hmodule + dir.AddressOfFunctions;
+	uint64_t ordinals = hmodule + dir.AddressOfNameOrdinals;
+
+	for (DWORD i = 0; i < dir.NumberOfNames; ++i) {
 
 		DWORD nameRva;
 
-		status = process_.memory().read(
+		MemoryStatus memStatus = process_.memory().read(
 			names + sizeof(DWORD) * i,
 			&nameRva,
 			sizeof(nameRva)
 		);
 
-		if (status != MemoryStatus::Success) {
-			return LoaderStatus::Other;
+		if (memStatus != MemoryStatus::Success) {
+			return LoaderStatus::ExportTableReadFailed;
 		}
 
 		std::string functionName;
 
-		status = process_.memory().readString(
+		memStatus = process_.memory().readString(
 			hmodule + nameRva,
 			functionName,
 			260
 		);
 
-		if (status != MemoryStatus::Success) {
-			return LoaderStatus::Other;
+		if (memStatus != MemoryStatus::Success) {
+			return LoaderStatus::ExportTableReadFailed;
 		}
 
 		if (functionName != name) {
 			continue;
 		}
 
-		std::cout << "Found function: " << name << std::endl;
-
 		WORD functionIndex;
 
-		status = process_.memory().read(
+		memStatus = process_.memory().read(
 			ordinals + sizeof(WORD) * i,
 			&functionIndex,
 			sizeof(functionIndex)
 		);
 
-		if (status != MemoryStatus::Success) {
-			return LoaderStatus::Other;
+		if (memStatus != MemoryStatus::Success) {
+			return LoaderStatus::ExportTableReadFailed;
 		}
 
-		if (functionIndex >= exportDir.NumberOfFunctions) {
-			return LoaderStatus::Other;
+		if (functionIndex >= dir.NumberOfFunctions) {
+			return LoaderStatus::ExportNotFound;
 		}
 
 		DWORD functionRva;
 
-		status = process_.memory().read(
+		memStatus = process_.memory().read(
 			functions + sizeof(DWORD) * functionIndex,
 			&functionRva,
 			sizeof(functionRva)
 		);
 
-		if (status != MemoryStatus::Success) {
-			return LoaderStatus::Other;
+		if (memStatus != MemoryStatus::Success) {
+			return LoaderStatus::ExportTableReadFailed;
 		}
 
-		uint64_t exportEnd = static_cast<uint64_t>(exportDirRva) + exportDirSize;
-
-		if (functionRva >= exportDirRva && functionRva < exportEnd) {
-			return LoaderStatus::Other;
-		}
-
-		*addrOut = hmodule + functionRva;
-
-		return LoaderStatus::Success;
+		return resolveExportRva(
+			hmodule,
+			functionRva,
+			exports.directoryRva,
+			exports.directorySize,
+			addrOut,
+			depth
+		);
 	}
-
-	std::cout << "Failed to resolve address for " << name << std::endl; 
 
 	return LoaderStatus::ExportNotFound;
 }
+
+LoaderStatus Loader::resolveProcAddress(uint64_t hmodule, WORD ordinal, uint64_t* addrOut, size_t depth) {
+	
+	if (hmodule == 0 || addrOut == nullptr) {
+		return LoaderStatus::ExportTableReadFailed;
+	}
+
+	ExportContext exports;
+
+	LoaderStatus status = getExportContext(hmodule, exports);
+
+	if (status != LoaderStatus::Success) {
+		return status;
+	}
+
+	const IMAGE_EXPORT_DIRECTORY& dir = exports.directory;
+
+	if (ordinal < dir.Base) {
+		return LoaderStatus::ExportNotFound;
+	}
+
+	DWORD functionIndex = static_cast<DWORD>(ordinal - dir.Base);
+
+	if (functionIndex >= dir.NumberOfFunctions) {
+		return LoaderStatus::ExportNotFound;
+	}
+
+	DWORD functionRva;
+
+	MemoryStatus memStatus = process_.memory().read(
+		hmodule +
+		dir.AddressOfFunctions +
+		sizeof(DWORD) * functionIndex,
+		&functionRva,
+		sizeof(functionRva)
+	);
+
+	if (memStatus != MemoryStatus::Success) {
+		return LoaderStatus::ExportTableReadFailed;
+	}
+
+	return resolveExportRva(
+		hmodule,
+		functionRva,
+		exports.directoryRva,
+		exports.directorySize,
+		addrOut,
+		depth
+	);
+}
+
+LoaderStatus Loader::resolveExportRva(
+	uint64_t hmodule,
+	DWORD functionRva,
+	DWORD exportDirRva,
+	DWORD exportDirSize,
+	uint64_t* addrOut,
+	size_t depth)
+{
+	if (addrOut == nullptr) {
+		return LoaderStatus::InvalidArgument;
+	}
+
+	uint64_t exportEnd = static_cast<uint64_t>(exportDirRva) + exportDirSize;
+
+	// RVA inside export directory = forwarded export
+	if (functionRva >= exportDirRva && functionRva < exportEnd) {
+		
+		std::string forwarder;
+
+		MemoryStatus status = process_.memory().readString(
+			hmodule + functionRva,
+			forwarder,
+			260
+		);
+
+		if (status != MemoryStatus::Success) {
+			return LoaderStatus::ForwarderReadFailed;
+		}
+
+		return resolveForwarder(
+			forwarder,
+			hmodule,
+			addrOut,
+			depth + 1
+		);
+	}
+
+	*addrOut = hmodule + functionRva;
+
+	return LoaderStatus::Success;
+}
+
+LoaderStatus Loader::resolveForwarder(const std::string& forwarder, uint64_t parentModuleBase, uint64_t* addrOut, size_t depth) {
+	constexpr size_t MAX_FORWARD_DEPTH = 32;
+
+	if (addrOut == nullptr || forwarder.empty()) {
+		return LoaderStatus::InvalidArgument;
+	}
+
+	if (depth > MAX_FORWARD_DEPTH) {
+		std::cout
+			<< "[ERROR] Maximum forwarder depth exceeded\n"
+			<< "        forwarder: " << forwarder << '\n'
+			<< "        depth:     " << depth << '\n';
+
+		return LoaderStatus::ForwarderDepthExceeded;
+	}
+
+	size_t dot = forwarder.find('.');
+
+	if (dot == std::string::npos ||
+		dot == 0 ||
+		dot == forwarder.size() - 1)
+	{
+		std::cout
+			<< "[ERROR] Invalid forwarder string\n"
+			<< "        forwarder: " << forwarder << '\n';
+
+		return LoaderStatus::InvalidForwarder;
+	}
+
+	std::string moduleName = forwarder.substr(0, dot);
+	std::string exportName = forwarder.substr(dot + 1);
+
+	std::cout
+		<< "[FWD] " << forwarder
+		<< " (depth " << depth << ")\n";
+
+	// Forwarder strings generally omit the extension
+	if (!moduleName.ends_with(".dll")) {
+		moduleName += ".dll";
+	}
+
+	ImageContext* parentModule = process_.findImageByBase(parentModuleBase);
+
+	std::wstring parentName;
+
+	if (parentModule != nullptr) {
+		parentName.assign(
+			parentModule->name.begin(),
+			parentModule->name.end()
+		);
+	}
+
+	// Handle API-set contracts too
+	if (ApiSet::isContract(moduleName)) {
+
+		std::wstring wname(
+			moduleName.begin(),
+			moduleName.end()
+		);
+
+		auto host = ApiSet::resolve(
+			wname,
+			parentName
+		);
+
+		if (!host) {
+			return LoaderStatus::ApiSetResolutionFailed;
+		}
+
+		moduleName = std::string(
+			host->begin(),
+			host->end()
+		);
+	}
+
+	ImageContext* module = process_.findImage(moduleName);
+
+	if (module == nullptr) {
+
+		LoaderStatus status = loadModule(moduleName, &module);
+
+		if (status != LoaderStatus::Success) {
+			return status;
+		}
+	}
+
+	if (module == nullptr) {
+		return LoaderStatus::ForwarderError;
+	}
+
+	// Ordinal forwarder
+	if (exportName.starts_with("#")) {
+
+		if (exportName.size() == 1) {
+			return LoaderStatus::ForwarderError;
+		}
+
+		try {
+			unsigned long value = std::stoul(exportName.substr(1));
+
+			if (value > UINT16_MAX) {
+				return LoaderStatus::ForwarderError;
+			}
+
+			WORD ordinal = static_cast<WORD>(value);
+
+			return resolveProcAddress(
+				module->baseAddress,
+				ordinal,
+				addrOut,
+				depth
+			);
+		}
+		catch (...) {
+			return LoaderStatus::ForwarderError;
+		}
+	}
+
+	return resolveProcAddress(
+		module->baseAddress,
+		exportName,
+		addrOut,
+		depth
+	);
+}
+
+LoaderStatus Loader::setSectionProtections() {
+
+	uint64_t pebAddress = process_.getPeb();
+	
+	ImageContext* ctx = process_.mainImage();
+	uint64_t moduleBase = ctx->baseAddress;
+
+	printf("%llX\n", moduleBase);
+
+	//for (auto& it : process_.images_) {
+
+	//}
+
+	return LoaderStatus::Success;
+}
+
