@@ -75,12 +75,6 @@ enum class PageProtection {
     ExecuteWriteCopy = 0x80
 };
 
-struct Protection {
-    bool r = false;
-    bool w = false;
-    bool x = false;
-};
-
 
 
 struct Page {

@@ -15,6 +15,12 @@ enum class ImageState {
 	Failed
 };
 
+enum class InitializationState {
+	Uninitialized,
+	Initializing, 
+	Initialized
+};
+
 struct ImageContext {
 	std::string name;
 	std::filesystem::path path;
@@ -25,5 +31,8 @@ struct ImageContext {
 	size_t size = 0;
 
 	ImageType type;
-	ImageState state = ImageState::Loading; 
+	ImageState state = ImageState::Loading;
+	InitializationState initState = InitializationState::Uninitialized;
+	std::vector<ImageContext*> dependencies;
+	uint64_t ldrEntryAddress = 0;
 };

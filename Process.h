@@ -33,6 +33,8 @@ public:
 	MemoryStatus initializePeb();
 	uint64_t getPeb() { return pebAddress_; }
 
+	void imageEnum();
+
 
 
 private:
@@ -40,7 +42,7 @@ private:
 	MemoryManager memoryManager_;
 	ImageContext* mainImage_ = nullptr;
 	std::unordered_map<std::string, ImageContext> images_;
-	uint64_t pebAddress_ = 0;	// VA of PEB
+	uint64_t pebAddress_ = 0;	// Guest VA of PEB
 
 	
 

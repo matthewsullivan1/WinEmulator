@@ -375,6 +375,11 @@ LoaderStatus Loader::resolveImageImports(ImageContext* ctx) {
 			return LoaderStatus::InvalidModuleContext;
 		}
 
+
+		if (pModule != ctx && find(ctx->dependencies.begin(),ctx->dependencies.end(), pModule) == ctx->dependencies.end()) {
+			ctx->dependencies.push_back(pModule);
+		}
+		
 		uint64_t hmodule = pModule->baseAddress;
 
 		uint32_t lookupRva = (import.OriginalFirstThunk != 0) ? import.OriginalFirstThunk : import.FirstThunk;
@@ -582,6 +587,7 @@ LoaderStatus Loader::loadModule(const std::string& name, ImageContext** ctxOut) 
 		*ctxOut = ctx;
 		return LoaderStatus::Success;
 	}
+
 
 	auto pathOpt = findImagePath(name);
 	if (!pathOpt) {
@@ -1027,4 +1033,5 @@ LoaderStatus Loader::setSectionProtections() {
 
 	return LoaderStatus::Success;
 }
+
 

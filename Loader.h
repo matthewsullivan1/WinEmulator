@@ -166,6 +166,7 @@ public:
 
     LoaderStatus setSectionProtections();
 
+
 private:
     Process& process_; 
 };

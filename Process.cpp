@@ -1,6 +1,7 @@
 // Process.cpp
 
 #include "Process.h"
+#include "WindowsStructs.h"
 #include <iostream>
 
 ImageContext* Process::findImage(std::string name) {
@@ -113,14 +114,102 @@ const ImageContext* Process::findImageByBase(uint64_t baseAddress) const {
 MemoryStatus Process::initializePeb() {
 	
 	uint64_t pebAddress;
-	MemoryStatus status = memoryManager_.allocate(0, sizeof(PEB), PageProtection::ReadWrite, RegionType::Private, &pebAddress);
+	uint64_t ldrAddress;
+
+	_GUEST_PEB peb;
+	_GUEST_PEB_LDR_DATA ldr;
+
+	MemoryStatus status = memoryManager_.allocate(0, sizeof(_GUEST_PEB), PageProtection::ReadWrite, RegionType::Private, &pebAddress);
 
 	if (status != MemoryStatus::Success) {
 		return status;
 	}
 
+	status = memoryManager_.allocate(0, sizeof(_GUEST_PEB_LDR_DATA), PageProtection::ReadWrite, RegionType::Private, &ldrAddress);
+
+	if (status != MemoryStatus::Success) {
+		return status;
+	}
+
+	pebAddress_ = pebAddress;
+	peb.ImageBaseAddress = mainImage_->baseAddress;
+	peb.Ldr = ldrAddress;
+
+	ldr.Length = sizeof(_GUEST_PEB_LDR_DATA);
+
+	for (auto& [name, ctx] : images_) {
+
+		uint64_t entryAddress;
+		_GUEST_LDR_DATA_TABLE_ENTRY entry; 
+
+		MemoryStatus status = memoryManager_.allocate(
+			0, 
+			sizeof(_GUEST_LDR_DATA_TABLE_ENTRY),
+			PageProtection::ReadWrite,
+			RegionType::Private, 
+			&entryAddress
+		);
+
+		if (status != MemoryStatus::Success) {
+			return status;
+		}
+
+		ctx.ldrEntryAddress = entryAddress;
+		
+		entry.DllBase = ctx.baseAddress;
+		entry.EntryPoint = ctx.entryPoint;
+		entry.SizeOfImage = ctx.size;
+
+		std::wstring modulePath = ctx.path.wstring();
+		std::wstring moduleName(ctx.name.begin(), ctx.name.end());
+
+		_GUEST_UNICODE_STRING FullDllName;
+		_GUEST_UNICODE_STRING BaseDllName;
+
+		FullDllName.Length = static_cast<uint16_t>(sizeof(wchar_t) * modulePath.size());
+		BaseDllName.Length = static_cast<uint16_t>(sizeof(wchar_t) * moduleName.size());
+
+		FullDllName.MaximumLength = static_cast<uint16_t>(sizeof(wchar_t) * (modulePath.size() + 1));
+		BaseDllName.MaximumLength = static_cast<uint16_t>(sizeof(wchar_t) * (moduleName.size() + 1));
+
+		uint64_t pathBuf, nameBuf;
+
+		status = memoryManager_.allocate(0, static_cast<size_t>(FullDllName.MaximumLength), PageProtection::ReadWrite, RegionType::Private, &pathBuf);
+		if (status != MemoryStatus::Success) { return status; }
+
+		status = memoryManager_.allocate(0, static_cast<size_t>(BaseDllName.MaximumLength), PageProtection::ReadWrite, RegionType::Private, &nameBuf);
+		if (status != MemoryStatus::Success) { return status; }
+
+		FullDllName.Buffer = pathBuf;
+		BaseDllName.Buffer = nameBuf;
+
+		status = memoryManager_.write(pathBuf, modulePath.c_str(), FullDllName.MaximumLength);
+		if (status != MemoryStatus::Success) { return status; }
+
+		status = memoryManager_.write(nameBuf, moduleName.c_str(), BaseDllName.MaximumLength);
+		if (status != MemoryStatus::Success) { return status; }
+
+		entry.FullDllName = FullDllName;
+		entry.BaseDllName = BaseDllName;
+
+		status = memoryManager_.write(entryAddress, &entry, sizeof(entry));
+		if (status != MemoryStatus::Success) { return status; }
+
+		printf("FullDllName:\t%ls\nBaseDllName:\t%ls\nVirtualAddress:\t%llu\n\n", modulePath.c_str(), moduleName.c_str(), entryAddress);
+
+	}
 
 
+}
 
 
+void Process::imageEnum() {
+
+	for (const auto it : images_) {
+		printf("%llx\t%s\n", it.second.baseAddress, it.second.name.c_str());
+		for (const auto dep : it.second.dependencies) {
+			printf("%s\t", dep->name.c_str());
+		}
+		printf("\n");
+	}
 }
