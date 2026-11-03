@@ -84,9 +84,7 @@ std::optional<std::wstring> ApiSet::resolve(std::wstring_view contract, std::wst
     //
     constexpr size_t API_SET_MAP_OFFSET = 0x68;
 
-    auto map = *reinterpret_cast<const ApiSetNamespace* const*>(
-        peb + API_SET_MAP_OFFSET
-        );
+    auto map = *reinterpret_cast<const ApiSetNamespace* const*>(peb + API_SET_MAP_OFFSET);
 
     //std::cout
     //    << "[APISET-DEBUG] ApiSetMap: 0x"
@@ -165,56 +163,10 @@ std::optional<std::wstring> ApiSet::resolve(std::wstring_view contract, std::wst
     //    << L"[APISET-DEBUG] Normalized target: "
     //    << target << L'\n';
 
-    const auto* base =
-        reinterpret_cast<const std::byte*>(map);
+    const auto* base = reinterpret_cast<const std::byte*>(map);
 
-    const auto* entries =
-        reinterpret_cast<const ApiSetNamespaceEntry*>(
-            base + map->EntryOffset
-            );
-    //std::cout
-    //    << "[APISET-DEBUG] First namespace entries:\n";
+    const auto* entries = reinterpret_cast<const ApiSetNamespaceEntry*>(base + map->EntryOffset);
 
-    for (ULONG i = 0; i < std::min<ULONG>(map->Count, 10); ++i) {
-
-        const ApiSetNamespaceEntry& entry = entries[i];
-
-        //std::cout
-        //    << "    [" << i << "]"
-        //    << " Flags=0x" << std::hex << entry.Flags
-        //    << " NameOffset=0x" << entry.NameOffset
-        //    << " NameLength=0x" << entry.NameLength
-        //    << " HashedLength=0x" << entry.HashedLength
-        //    << " ValueOffset=0x" << entry.ValueOffset
-        //    << " ValueCount=0x" << entry.ValueCount
-        //    << std::dec << '\n';
-
-        uint64_t nameEnd =
-            static_cast<uint64_t>(entry.NameOffset) +
-            entry.NameLength;
-
-        if (entry.NameLength != 0 &&
-            nameEnd <= map->Size &&
-            (entry.NameLength % sizeof(wchar_t)) == 0)
-        {
-            const auto* namePtr =
-                reinterpret_cast<const wchar_t*>(
-                    base + entry.NameOffset
-                    );
-
-            std::wstring_view name(
-                namePtr,
-                entry.NameLength / sizeof(wchar_t)
-            );
-
-            //std::wcout
-            //    << L"         Name=\"" << name << L"\"\n";
-        }
-        else {
-            std::cout
-                << "         [invalid name range]\n";
-        }
-    }
     //
     // 5. Search namespace entries.
     //
