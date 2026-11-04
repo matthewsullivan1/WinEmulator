@@ -66,6 +66,10 @@ ImageContext* Process::addImage(std::string name) {
 		}
 		);
 
+	if (inserted) {
+		loadOrder_.push_back(&it->second);
+	}
+
 	return &it->second;
 }
 
@@ -137,7 +141,7 @@ MemoryStatus Process::initializePeb() {
 
 	ldr.Length = sizeof(_GUEST_PEB_LDR_DATA);
 
-	for (auto& [name, ctx] : images_) {
+	for (auto& ctx : loadOrder_) {
 
 		uint64_t entryAddress;
 		_GUEST_LDR_DATA_TABLE_ENTRY entry; 
@@ -154,14 +158,14 @@ MemoryStatus Process::initializePeb() {
 			return status;
 		}
 
-		ctx.ldrEntryAddress = entryAddress;
+		ctx->ldrEntryAddress = entryAddress;
 		
-		entry.DllBase = ctx.baseAddress;
-		entry.EntryPoint = ctx.entryPoint;
-		entry.SizeOfImage = ctx.size;
+		entry.DllBase = ctx->baseAddress;
+		entry.EntryPoint = ctx->entryPoint;
+		entry.SizeOfImage = ctx->size;
 
-		std::wstring modulePath = ctx.path.wstring();
-		std::wstring moduleName(ctx.name.begin(), ctx.name.end());
+		std::wstring modulePath = ctx->path.wstring();
+		std::wstring moduleName(ctx->name.begin(), ctx->name.end());
 
 		_GUEST_UNICODE_STRING FullDllName;
 		_GUEST_UNICODE_STRING BaseDllName;
@@ -199,17 +203,26 @@ MemoryStatus Process::initializePeb() {
 
 	}
 
+	return MemoryStatus::Success;
 
 }
 
+MemoryStatus Process::linkModulesList() {
 
-void Process::imageEnum() {
+	_GUEST_PEB peb{};
+	_GUEST_PEB_LDR_DATA ldr{};
+	MemoryStatus status; 
 
-	for (const auto it : images_) {
-		printf("%llx\t%s\n", it.second.baseAddress, it.second.name.c_str());
-		for (const auto dep : it.second.dependencies) {
-			printf("%s\t", dep->name.c_str());
-		}
-		printf("\n");
-	}
+	status = memoryManager_.read(pebAddress_, &peb, sizeof(_GUEST_PEB));
+	if (status != MemoryStatus::Success) { return status; }
+
+	status = memoryManager_.read(peb.Ldr, &ldr, sizeof(_GUEST_PEB_LDR_DATA));
+	if (status != MemoryStatus::Success) { return status; }
+
+	/*
+	Loop over the loadOrder image context pointers, get their ldr data table entry VA, read, 
+	
+	*/
+
+
 }

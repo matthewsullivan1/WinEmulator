@@ -31,25 +31,24 @@ public:
 	const ImageContext* findImageByBase(uint64_t baseAddress) const;
 
 	MemoryStatus initializePeb();
+	MemoryStatus linkModulesList();
 	uint64_t getPeb() { return pebAddress_; }
-
-	void imageEnum();
 
 
 
 private:
 	GuestMemory memory_;
 	MemoryManager memoryManager_;
+
 	ImageContext* mainImage_ = nullptr;
 	std::unordered_map<std::string, ImageContext> images_;
-	uint64_t pebAddress_ = 0;	// Guest VA of PEB
+	std::vector<ImageContext*> loadOrder_;
 
+
+	uint64_t pebAddress_ = 0;
+	uint64_t tebAddress_ = 0;
 	
 
 	static std::string normalizeModuleName(std::string name);
-};
-
-typedef struct PEB {
-	uint64_t ModulesList;		// Virtual address of the head of the modules list
 };
 
