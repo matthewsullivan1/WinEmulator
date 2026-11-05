@@ -32,8 +32,9 @@ public:
 
 	MemoryStatus initializePeb();
 	MemoryStatus linkModulesList();
-	uint64_t getPeb() { return pebAddress_; }
-	void VerifyPeb();
+	const uint64_t getPeb() { return pebAddress_; }
+
+	const std::vector<ImageContext*>& getLoadOrder() const { return loadOrder_; }
 
 
 
