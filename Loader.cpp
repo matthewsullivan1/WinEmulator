@@ -1020,16 +1020,16 @@ LoaderStatus Loader::resolveForwarder(const std::string& forwarder, uint64_t par
 
 LoaderStatus Loader::setSectionProtections() {
 
-	uint64_t pebAddress = process_.getPeb();
+	for (auto it : process_.getLoadOrder()) {
 	
-	ImageContext* ctx = process_.mainImage();
-	uint64_t moduleBase = ctx->baseAddress;
+		// ctx->baseAddress 
+		// Derive section table
+		// Iterate over sections
+		// Set appropriate protections
 
-	printf("%llX\n", moduleBase);
 
-	//for (auto& it : process_.images_) {
+	}
 
-	//}
 
 	return LoaderStatus::Success;
 }
