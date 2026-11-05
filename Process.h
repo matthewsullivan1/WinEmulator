@@ -33,6 +33,7 @@ public:
 	MemoryStatus initializePeb();
 	MemoryStatus linkModulesList();
 	uint64_t getPeb() { return pebAddress_; }
+	void VerifyPeb();
 
 
 
@@ -43,7 +44,6 @@ private:
 	ImageContext* mainImage_ = nullptr;
 	std::unordered_map<std::string, ImageContext> images_;
 	std::vector<ImageContext*> loadOrder_;
-
 
 	uint64_t pebAddress_ = 0;
 	uint64_t tebAddress_ = 0;

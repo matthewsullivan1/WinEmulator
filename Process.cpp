@@ -203,6 +203,12 @@ MemoryStatus Process::initializePeb() {
 
 	}
 
+	status = memoryManager_.write(pebAddress, &peb, sizeof(_GUEST_PEB));
+	if (status != MemoryStatus::Success) { return status; }
+
+	status = memoryManager_.write(ldrAddress, &ldr, sizeof(_GUEST_PEB_LDR_DATA));
+	if (status != MemoryStatus::Success) return status; 
+
 	return MemoryStatus::Success;
 
 }
@@ -219,10 +225,164 @@ MemoryStatus Process::linkModulesList() {
 	status = memoryManager_.read(peb.Ldr, &ldr, sizeof(_GUEST_PEB_LDR_DATA));
 	if (status != MemoryStatus::Success) { return status; }
 
-	/*
-	Loop over the loadOrder image context pointers, get their ldr data table entry VA, read, 
-	
-	*/
+	auto linkList = [&](size_t headOffset, size_t nodeOffset) -> MemoryStatus {
 
+		uint64_t headAddress = peb.Ldr + headOffset;
 
+		_GUEST_LIST_ENTRY head{}; 
+		size_t count = loadOrder_.size();
+
+		// empty circular list
+		if (count == 0) {
+			head.Flink = headAddress;
+			head.Blink = headAddress;
+		}
+		else {
+			auto nodeAddress = [&](size_t i) -> uint64_t {
+				return loadOrder_[i]->ldrEntryAddress + nodeOffset;
+			};
+
+			head.Flink = nodeAddress(0);
+			head.Blink = nodeAddress(count - 1);
+
+			for (size_t i = 0; i < count; ++i) {
+
+				_GUEST_LIST_ENTRY node{};
+
+				node.Blink = (i == 0)
+					? headAddress
+					: nodeAddress(i - 1);
+
+				node.Flink = (i == count - 1)
+					? headAddress
+					: nodeAddress(i + 1);
+
+				MemoryStatus result = memoryManager_.write(nodeAddress(i), &node, sizeof(node));
+				if (result != MemoryStatus::Success) return result;
+			}
+		}
+
+		return memoryManager_.write(headAddress, &head, sizeof(head));
+	};
+
+	status = linkList(
+		offsetof(_GUEST_PEB_LDR_DATA, InLoadOrderModuleList),
+		offsetof(_GUEST_LDR_DATA_TABLE_ENTRY, InLoadOrderLinks)
+	);
+	if (status != MemoryStatus::Success) return status;
+
+	status = linkList(
+		offsetof(_GUEST_PEB_LDR_DATA, InMemoryOrderModuleList),
+		offsetof(_GUEST_LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks)
+	);
+	if (status != MemoryStatus::Success) return status;
+
+	status = linkList(
+		offsetof(_GUEST_PEB_LDR_DATA, InInitializationOrderModuleList),
+		offsetof(_GUEST_LDR_DATA_TABLE_ENTRY, InInitializationOrderLinks)
+	);
+	if (status != MemoryStatus::Success) return status;
+
+	// Debug verification
+	//_GUEST_PEB peb{};
+	//_GUEST_PEB_LDR_DATA ldr{};
+
+	memoryManager_.read(pebAddress_, &peb, sizeof(peb));
+	memoryManager_.read(peb.Ldr, &ldr, sizeof(ldr));
+
+	auto verifyList = [&](const char* listName,
+		size_t headOffset,
+		size_t nodeOffset) {
+
+			uint64_t headAddress = peb.Ldr + headOffset;
+
+			_GUEST_LIST_ENTRY head{};
+			memoryManager_.read(headAddress, &head, sizeof(head));
+
+			std::cout << "\n" << listName << "\n";
+			std::cout << "Head: 0x" << std::hex << headAddress
+				<< " Flink: 0x" << head.Flink
+				<< " Blink: 0x" << head.Blink << "\n";
+
+			uint64_t current = head.Flink;
+			uint64_t previous = headAddress;
+			size_t count = 0;
+			bool valid = true;
+
+			while (current != headAddress && count < loadOrder_.size()) {
+
+				_GUEST_LIST_ENTRY node{};
+				MemoryStatus status = memoryManager_.read(current, &node, sizeof(node));
+
+				if (status != MemoryStatus::Success) {
+					valid = false;
+					break;
+				}
+
+				// Recover the containing LDR_DATA_TABLE_ENTRY address.
+				uint64_t entryAddress = current - nodeOffset;
+
+				_GUEST_LDR_DATA_TABLE_ENTRY entry{};
+				status = memoryManager_.read(entryAddress, &entry, sizeof(entry));
+
+				if (status != MemoryStatus::Success) {
+					valid = false;
+					break;
+				}
+
+				if (node.Blink != previous) {
+					valid = false;
+					std::cout << "  ERROR: Incorrect Blink\n";
+				}
+
+				std::cout << "  [" << std::dec << count << "]"
+					<< " DllBase: 0x" << std::hex << entry.DllBase
+					<< " Node: 0x" << current
+					<< " Flink: 0x" << node.Flink
+					<< " Blink: 0x" << node.Blink << "\n";
+
+				previous = current;
+				current = node.Flink;
+				++count;
+			}
+
+			if (current != headAddress) {
+				valid = false;
+				std::cout << "  ERROR: List did not return to head\n";
+			}
+
+			if (head.Blink != previous) {
+				valid = false;
+				std::cout << "  ERROR: Head Blink does not match last node\n";
+			}
+
+			if (count != loadOrder_.size()) {
+				valid = false;
+				std::cout << "  ERROR: Unexpected module count\n";
+			}
+
+			std::cout << (valid ? "  PASS\n" : "  FAIL\n");
+		};
+
+	verifyList(
+		"InLoadOrderModuleList",
+		offsetof(_GUEST_PEB_LDR_DATA, InLoadOrderModuleList),
+		offsetof(_GUEST_LDR_DATA_TABLE_ENTRY, InLoadOrderLinks)
+	);
+
+	verifyList(
+		"InMemoryOrderModuleList",
+		offsetof(_GUEST_PEB_LDR_DATA, InMemoryOrderModuleList),
+		offsetof(_GUEST_LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks)
+	);
+
+	verifyList(
+		"InInitializationOrderModuleList",
+		offsetof(_GUEST_PEB_LDR_DATA, InInitializationOrderModuleList),
+		offsetof(_GUEST_LDR_DATA_TABLE_ENTRY, InInitializationOrderLinks)
+	);
+
+	std::cout << std::dec;
+
+	return MemoryStatus::Success; 
 }
