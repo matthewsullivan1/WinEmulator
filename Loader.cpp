@@ -1022,10 +1022,19 @@ LoaderStatus Loader::setSectionProtections() {
 
 	for (auto it : process_.getLoadOrder()) {
 	
-		// ctx->baseAddress 
-		// Derive section table
-		// Iterate over sections
-		// Set appropriate protections
+		uint64_t base = it->baseAddress;
+		
+		IMAGE_DOS_HEADER dos{};
+		MemoryStatus status = process_.memory().read(base, &dos, sizeof(IMAGE_DOS_HEADER));
+		if (status != MemoryStatus::Success) return LoaderStatus::SectionProtectionUpdateFailed;
+
+		IMAGE_NT_HEADERS nt{};
+		status = process_.memory().read(dos.e_lfanew, &nt, sizeof(IMAGE_NT_HEADERS));
+		if (status != MemoryStatus::Success) return LoaderStatus::SectionProtectionUpdateFailed;
+
+		
+
+
 
 
 	}

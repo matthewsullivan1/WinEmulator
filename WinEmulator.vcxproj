@@ -139,21 +139,35 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="ApiSet.h" />
     <ClInclude Include="BasicBlock.h" />
     <ClInclude Include="Disassembler.h" />
     <ClInclude Include="GuestMemory.h" />
+    <ClInclude Include="ImageContext.h" />
     <ClInclude Include="Instruction.h" />
+    <ClInclude Include="Loader.h" />
     <ClInclude Include="MemoryManager.h" />
     <ClInclude Include="MemoryStructs.h" />
     <ClInclude Include="PECompat.h" />
     <ClInclude Include="PEFile.h" />
+    <ClInclude Include="Process.h" />
+    <ClInclude Include="WindowsStructs.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="ApiSet.cpp" />
     <ClCompile Include="Disassembler.cpp" />
     <ClCompile Include="GuestMemory.cpp" />
-    <ClCompile Include="main.cpp" />
+    <ClCompile Include="Loader.cpp" />
+    <ClCompile Include="LoaderTest.cpp" />
+    <ClCompile Include="main.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="MemoryManager.cpp" />
+    <ClCompile Include="mm_test.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="PEFile.cpp" />
+    <ClCompile Include="Process.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

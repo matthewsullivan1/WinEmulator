@@ -38,6 +38,7 @@ enum class LoaderStatus {
     InvalidArgument,
     ForwarderDepthExceeded,
     InvalidForwarder,
+    SectionProtectionUpdateFailed,
 
     Other
 };
