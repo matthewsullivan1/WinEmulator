@@ -3,9 +3,6 @@
 #include "common/Types.h"
 #include "windows/WinTypes.h"
 
-using emu::ptr_t;
-using win::WORD;
-
 namespace win {
 
 	struct LIST_ENTRY {

@@ -30,11 +30,11 @@ namespace emu {
                 return MemoryStatus::MisalignedAddress;
             }
 
-            if (size > UINT64_MAX - preferredAddress) {
-                return MemoryStatus::AddressOverflow;
-            }
-
             address = preferredAddress;
+        }
+
+        if (address >= MAX_USER_ADDRESS_EXCLUSIVE || size > MAX_USER_ADDRESS_EXCLUSIVE - address) {
+            return MemoryStatus::InvalidAddress;
         }
 
         ptr_t end = address + size;
@@ -303,7 +303,9 @@ namespace emu {
 
 
     std::optional<ptr_t> MemoryManager::findFreeAddress(size_t size) const {
+
         auto candidateOpt = alignUp(DYNAMIC_BASE, ALLOCATION_GRANULARITY);
+
         if (!candidateOpt) {
             return std::nullopt;
         }
@@ -312,7 +314,7 @@ namespace emu {
 
         for (const auto& [base, region] : regions_) {
 
-            if (size > UINT64_MAX - candidate) {
+            if (candidate >= MAX_USER_ADDRESS_EXCLUSIVE || size > MAX_USER_ADDRESS_EXCLUSIVE - candidate) {
                 return std::nullopt;
             }
 
@@ -320,9 +322,6 @@ namespace emu {
 
             if (candidateEnd <= region.base)
                 return candidate;
-
-            if (region.size > UINT64_MAX - region.base)
-                return std::nullopt;
 
             ptr_t regionEnd = region.base + region.size;
 
@@ -337,7 +336,7 @@ namespace emu {
             }
         }
 
-        if (size > UINT64_MAX - candidate) {
+        if (candidate >= MAX_USER_ADDRESS_EXCLUSIVE || size > MAX_USER_ADDRESS_EXCLUSIVE - candidate) {
             return std::nullopt;
         }
 
