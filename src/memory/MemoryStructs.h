@@ -21,7 +21,7 @@ struct MemoryRegion {
     ptr_t base = 0;
     size_t size = 0;
     RegionType type = RegionType::Private;
-    PageProtection allocationProtect = PageProtection::NoAccess;
+    PageProtection allocationProtection = PageProtection::NoAccess;
 };
 
 struct MemoryInfo {

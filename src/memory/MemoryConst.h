@@ -5,7 +5,8 @@
 
 constexpr uint64_t PAGE_SIZE = 0x1000;
 constexpr uint64_t ALLOCATION_GRANULARITY = 0x10000;
-constexpr uint64_t DYNAMIC_BASE = 0x0000000010000000;
+constexpr uint64_t DYNAMIC_BASE = 0x10000;
+constexpr uint64_t MAX_USER_ADDRESS_EXCLUSIVE = 0x0000800000000000;
 
 enum class RegionType {
     Private,
