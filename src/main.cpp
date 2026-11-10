@@ -1,3 +1,7 @@
+#include "common/Types.h"
+#include "loader/Loader.h"
+#include "memory/MemoryManager.h"
+#include "runtime/Process.h"
 
 
 int main() {

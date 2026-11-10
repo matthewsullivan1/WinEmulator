@@ -1,5 +1,7 @@
 .vs/
 x64/
+*.vcxproj
 *.vcxproj.user
+*.vcxproj.filters
 guest/windows/
 OLD/
