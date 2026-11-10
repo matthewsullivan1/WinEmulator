@@ -5,25 +5,31 @@
 #include <filesystem>
 #include <string>
 
-enum class ModuleState {
-    Loading,
-    Loaded,
-    Failed
-};
+#include "common/Types.h"
 
-enum class ImageType {
-    Executable,
-    DLL
-};
+namespace emu {
 
-struct Module {
-    std::string name;
-    std::filesystem::path path;
+    enum class ModuleState {
+        Loading,
+        Loaded,
+        Failed
+    };
 
-    uint64_t baseAddress = 0;
-    uint64_t entryPoint = 0;
-    size_t sizeOfImage = 0;
+    enum class ImageType {
+        Executable,
+        DLL
+    };
 
-    ImageType type = ImageType::Executable;
-    ModuleState state = ModuleState::Loading;
-};
+    // Eventually need to add reference counts here
+    struct Module {
+        std::string name;
+        std::filesystem::path path;
+
+        ptr_t baseAddress = 0;
+        ptr_t entryPoint = 0;
+        size_t sizeOfImage = 0;
+
+        ImageType type = ImageType::DLL;
+        ModuleState state = ModuleState::Loading;
+    };
+}; 
