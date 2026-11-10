@@ -2,7 +2,7 @@
 #include <array>
 #include <optional>
 #include "MemoryConst.h"
-#include "common/types.h"
+#include "common/Types.h"
 
 namespace emu {
 

@@ -1,15 +1,11 @@
 // MemoryManager.h
 #pragma once
-#include <cstdint>
 #include <map>
-#include <array>
-#include <expected>
 #include <optional>
-#include <string>
 
 #include "MemoryStructs.h"
 #include "GuestMemory.h"
-#include "common/types.h"
+#include "common/Types.h"
 
 namespace emu {
 	class MemoryManager {

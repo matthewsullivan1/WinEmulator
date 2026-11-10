@@ -1,6 +1,5 @@
 // GuestMemory.h
 #pragma once
-#include <cstdint>
 #include <unordered_map>
 
 #include "MemoryStructs.h"
