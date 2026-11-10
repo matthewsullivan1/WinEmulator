@@ -4,6 +4,11 @@
 #include <string>
 #include <algorithm>
 
+using win::IMAGE_DOS_HEADER;
+using win::IMAGE_OPTIONAL_HEADER;
+using win::IMAGE_NT_HEADERS;
+
+
 PEFile::PEFile(const std::filesystem::path& path) : path_(path), size_(0) {
 	if (!std::filesystem::exists(path)) {
 		std::cerr << "Path " << path << " does not exist" << std::endl;
@@ -37,7 +42,7 @@ bool PEFile::parseHeaders() {
 		return false;
 	}
 
-	const IMAGE_NT_HEADERS64* nt = ntHeaders();
+	const IMAGE_NT_HEADER* nt = ntHeaders();
 	if (!nt || !validateNt()) {
 		return false;
 	}

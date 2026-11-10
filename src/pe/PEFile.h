@@ -4,8 +4,9 @@
 #include <vector>
 #include <span>
 #include <string>
-#include <windows.h>
 #include <filesystem>
+
+#include "windows/PeStructs.h"
 
 // Update to either utilities to parse a PE or a lightweight class. Needs to use wintypes.h typedefs
 
@@ -16,17 +17,17 @@ public:
 	std::size_t fileSize() const;
 	template<typename T> const T* view(std::size_t offset) const;
 
-	const IMAGE_DOS_HEADER* dosHeader()				const; //return pointer to dos header
-	const IMAGE_NT_HEADERS64* ntHeaders()			const; // return pointer to nt header
-	const IMAGE_FILE_HEADER* fileHeader()			const; // return pointer to file header
-	const IMAGE_OPTIONAL_HEADER* optionalHeader()	const; // return pointer to optional header
-	const IMAGE_DATA_DIRECTORY* dataDirectorty()	const; // return pointer to data directory base address
-	const IMAGE_SECTION_HEADER* sectionHeader()		const; // return pointer to section header base address
+	const win::IMAGE_DOS_HEADER* dosHeader()				const; //return pointer to dos header
+	const win::IMAGE_NT_HEADERS64* ntHeaders()			const; // return pointer to nt header
+	const win::IMAGE_FILE_HEADER* fileHeader()			const; // return pointer to file header
+	const win::IMAGE_OPTIONAL_HEADER* optionalHeader()	const; // return pointer to optional header
+	const win::IMAGE_DATA_DIRECTORY* dataDirectorty()	const; // return pointer to data directory base address
+	const win::IMAGE_SECTION_HEADER* sectionHeader()		const; // return pointer to section header base address
 	std::span<const IMAGE_SECTION_HEADER> sections() const; // return pointer to section header as well as number of sections
-	const DWORD entryPointRva() const;
-	const ULONGLONG imageBase() const;
-	const IMAGE_SECTION_HEADER* sectionFromRva(DWORD rva) const;
-	const std::optional<size_t> rvaToFileOffset(DWORD rva) const;
+	const win::DWORD entryPointRva() const;
+	const win::ULONGLONG imageBase() const;
+	const win::IMAGE_SECTION_HEADER* sectionFromRva(win::DWORD rva) const;
+	const std::optional<size_t> rvaToFileOffset(win::DWORD rva) const;
 	std::span<const std::uint8_t> data() const;
 
 	bool parseHeaders();
