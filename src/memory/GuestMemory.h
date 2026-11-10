@@ -5,22 +5,23 @@
 
 #include "MemoryStructs.h"
 
-class GuestMemory {
-public:
-	MemoryStatus mapPage(uint64_t pageBase, PageProtection protection);
-	MemoryStatus unmapPage(uint64_t pageBase);
-	MemoryStatus ProtectPage(uint64_t address, PageProtection protection);
-	
-	MemoryStatus read(uint64_t address, void* dst, size_t size) const;
-	MemoryStatus write(uint64_t address, const void* src, size_t size);
+namespace emu {
+	class GuestMemory {
+	public:
+		MemoryStatus mapPage(ptr_t pageBase, PageProtection protection);
+		MemoryStatus unmapPage(ptr_t pageBase);
+		MemoryStatus ProtectPage(ptr_t address, PageProtection protection);
 
-	const Page* findPage(uint64_t address) const;
+		MemoryStatus read(ptr_t address, void* dst, size_t size) const;
+		MemoryStatus write(ptr_t address, const void* src, size_t size);
 
-private:
-	MemoryStatus validateRange(uint64_t address, size_t size, AccessType access) const;
-	std::unordered_map<uint64_t, Page> pages_;
+		const Page* findPage(ptr_t address) const;
+
+	private:
+		MemoryStatus validateRange(ptr_t address, size_t size, AccessType access) const;
+		std::unordered_map<ptr_t, Page> pages_;
+	};
 };
-
 
 
 

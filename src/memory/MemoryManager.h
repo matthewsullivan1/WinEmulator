@@ -11,8 +11,6 @@
 #include "GuestMemory.h"
 #include "common/types.h"
 
-// Note : need to fix findFreeAddress, reserve, to check against MAX_USER_ADDRESS_EXCLUSIVE
-
 namespace emu {
 	class MemoryManager {
 	public:

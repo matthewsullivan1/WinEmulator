@@ -8,9 +8,9 @@ namespace win {
 		BYTE							BeingDebugged;
 		BYTE							Reserved2[1];
 		uint64_t						Reserved3[1];
-		ptr_t							ImageBaseAddress;
-		ptr_t							Ldr;
-		ptr_t							ProcessParameters = 0;
+		uint64_t							ImageBaseAddress;
+		uint64_t							Ldr;
+		uint64_t							ProcessParameters = 0;
 		uint64_t                        Reserved4[3];
 		uint64_t                        AtlThunkSListPtr;
 		uint64_t                        Reserved5;
@@ -20,7 +20,7 @@ namespace win {
 		DWORD							AtlThunkSListPtr32;
 		uint64_t                        Reserved9[45];
 		BYTE							Reserved10[96];
-		ptr_t							PostProcessInitRoutine;
+		uint64_t							PostProcessInitRoutine;
 		BYTE							Reserved11[128];
 		uint64_t						Reserved12[1];
 		DWORD							SessionId = 0;

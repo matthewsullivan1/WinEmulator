@@ -1,7 +1,6 @@
 // Loader.h
 #pragma once
 
-#include "PEFile.h"
 #include "Process.h"
 #include <string.h>
 

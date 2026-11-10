@@ -3,125 +3,128 @@
 #include <cstdint>
 #include <optional>
 
-constexpr uint64_t PAGE_SIZE = 0x1000;
-constexpr uint64_t ALLOCATION_GRANULARITY = 0x10000;
-constexpr uint64_t DYNAMIC_BASE = 0x10000;
-constexpr uint64_t MAX_USER_ADDRESS_EXCLUSIVE = 0x0000800000000000;
+namespace emu {
 
-enum class RegionType {
-    Private,
-    Image,
-    Mapped
-};
+    constexpr uint64_t PAGE_SIZE = 0x1000;
+    constexpr uint64_t ALLOCATION_GRANULARITY = 0x10000;
+    constexpr ptr_t DYNAMIC_BASE = 0x10000;
+    constexpr ptr_t MAX_USER_ADDRESS_EXCLUSIVE = 0x0000800000000000;
 
-enum class MemoryState {
-    Free,
-    Reserved,
-    Committed
-};
+    enum class RegionType {
+        Private,
+        Image,
+        Mapped
+    };
 
-enum class AccessType {
-    Read,
-    Write,
-    Execute
-};
+    enum class MemoryState {
+        Free,
+        Reserved,
+        Committed
+    };
 
-enum class MemoryStatus {
-    Success,
+    enum class AccessType {
+        Read,
+        Write,
+        Execute
+    };
 
-    InvalidSize,
-    InvalidAddress,
-    AddressOverflow,
-    MisalignedAddress,
-    NoFreeAddress,
+    enum class MemoryStatus {
+        Success,
 
-    AddressMapped,
-    AlreadyReserved,
-    AlreadyCommitted,
+        InvalidSize,
+        InvalidAddress,
+        AddressOverflow,
+        MisalignedAddress,
+        NoFreeAddress,
 
-    NotMapped,
-    NotReserved,
-    NotCommitted,
+        AddressMapped,
+        AlreadyReserved,
+        AlreadyCommitted,
 
-    RangeCrossesRegion,
+        NotMapped,
+        NotReserved,
+        NotCommitted,
 
-    ProtectionViolation,
-    AccessViolation,
-    RegionNotFound,
-    InvalidRelease
-};
+        RangeCrossesRegion,
+
+        ProtectionViolation,
+        AccessViolation,
+        RegionNotFound,
+        InvalidRelease
+    };
 
 
-constexpr uint64_t alignDown(uint64_t value, uint64_t alignment) {
-    return value & ~(alignment - 1);
-}
-
-inline std::optional<uint64_t> alignUp(uint64_t value, uint64_t alignment) {
-    if (alignment == 0) {
-        return std::nullopt;
+    constexpr ptr_t alignDown(ptr_t value, ptr_t alignment) {
+        return value & ~(alignment - 1);
     }
 
-    if (value > UINT64_MAX - (alignment - 1)) {
-        return std::nullopt;
+    inline std::optional<ptr_t> alignUp(ptr_t value, uint64_t alignment) {
+        if (alignment == 0) {
+            return std::nullopt;
+        }
+
+        if (value > UINT64_MAX - (alignment - 1)) {
+            return std::nullopt;
+        }
+
+        return (value + alignment - 1) & ~(alignment - 1);
     }
 
-    return (value + alignment - 1) & ~(alignment - 1);
-}
+    enum class PageProtection {
+        NoAccess = 0x01,
+        ReadOnly = 0x02,
+        ReadWrite = 0x04,
+        WriteCopy = 0x08,
+        Execute = 0x10,
+        ExecuteRead = 0x20,
+        ExecuteReadWrite = 0x40,
+        ExecuteWriteCopy = 0x80
+    };
 
-enum class PageProtection {
-    NoAccess = 0x01,
-    ReadOnly = 0x02,
-    ReadWrite = 0x04,
-    WriteCopy = 0x08,
-    Execute = 0x10,
-    ExecuteRead = 0x20,
-    ExecuteReadWrite = 0x40,
-    ExecuteWriteCopy = 0x80
+    constexpr bool canRead(PageProtection protection) noexcept {
+        auto base = static_cast<PageProtection>(static_cast<uint32_t>(protection) & 0xFF);
+
+        switch (base) {
+        case PageProtection::ReadOnly:
+        case PageProtection::ReadWrite:
+        case PageProtection::WriteCopy:
+        case PageProtection::ExecuteRead:
+        case PageProtection::ExecuteReadWrite:
+        case PageProtection::ExecuteWriteCopy:
+            return true;
+
+        default:
+            return false;
+        }
+    }
+
+    constexpr bool canWrite(PageProtection protection) noexcept {
+        auto base = static_cast<PageProtection>(static_cast<uint32_t>(protection) & 0xFF);
+
+        switch (base) {
+        case PageProtection::ReadWrite:
+        case PageProtection::WriteCopy:
+        case PageProtection::ExecuteReadWrite:
+        case PageProtection::ExecuteWriteCopy:
+            return true;
+
+        default:
+            return false;
+        }
+    }
+
+    constexpr bool canExecute(PageProtection protection) noexcept {
+        auto base = static_cast<PageProtection>(static_cast<uint32_t>(protection) & 0xFF);
+
+        switch (base) {
+        case PageProtection::Execute:
+        case PageProtection::ExecuteRead:
+        case PageProtection::ExecuteReadWrite:
+        case PageProtection::ExecuteWriteCopy:
+            return true;
+
+        default:
+            return false;
+        }
+    }
 };
-
-constexpr bool canRead(PageProtection protection) noexcept {
-    auto base = static_cast<PageProtection>(static_cast<uint32_t>(protection) & 0xFF);
-
-    switch (base) {
-    case PageProtection::ReadOnly:
-    case PageProtection::ReadWrite:
-    case PageProtection::WriteCopy:
-    case PageProtection::ExecuteRead:
-    case PageProtection::ExecuteReadWrite:
-    case PageProtection::ExecuteWriteCopy:
-        return true;
-
-    default:
-        return false;
-    }
-}
-
-constexpr bool canWrite(PageProtection protection) noexcept {
-    auto base = static_cast<PageProtection>(static_cast<uint32_t>(protection) & 0xFF);
-
-    switch (base) {
-    case PageProtection::ReadWrite:
-    case PageProtection::WriteCopy:
-    case PageProtection::ExecuteReadWrite:
-    case PageProtection::ExecuteWriteCopy:
-        return true;
-
-    default:
-        return false;
-    }
-}
-
-constexpr bool canExecute(PageProtection protection) noexcept {
-    auto base = static_cast<PageProtection>(static_cast<uint32_t>(protection) & 0xFF);
-
-    switch (base) {
-    case PageProtection::Execute:
-    case PageProtection::ExecuteRead:
-    case PageProtection::ExecuteReadWrite:
-    case PageProtection::ExecuteWriteCopy:
-        return true;
-
-    default:
-        return false;
-    }
-}

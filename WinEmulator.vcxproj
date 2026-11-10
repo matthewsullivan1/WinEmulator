@@ -26,13 +26,16 @@
     <ClInclude Include="src\loader\Loader.h" />
     <ClInclude Include="src\loader\Module.h" />
     <ClInclude Include="src\memory\GuestMemory.h" />
+    <ClInclude Include="src\memory\MemoryConst.h" />
     <ClInclude Include="src\memory\MemoryManager.h" />
     <ClInclude Include="src\memory\MemoryStructs.h" />
     <ClInclude Include="src\pe\PECompat.h" />
     <ClInclude Include="src\pe\PEFile.h" />
     <ClInclude Include="src\runtime\Process.h" />
-    <ClInclude Include="src\windows\NtStructures.h" />
-    <ClInclude Include="src\windows\WindowsStructs.h" />
+    <ClInclude Include="src\runtime\RuntimeBootstrap.h" />
+    <ClInclude Include="src\windows\NtStructs.h" />
+    <ClInclude Include="src\windows\PeStructs.h" />
+    <ClInclude Include="src\windows\WinStructs.h" />
     <ClInclude Include="src\windows\WinTypes.h" />
   </ItemGroup>
   <ItemGroup>
@@ -43,6 +46,7 @@
     <ClCompile Include="src\memory\MemoryManager.cpp" />
     <ClCompile Include="src\pe\PEFile.cpp" />
     <ClCompile Include="src\runtime\Process.cpp" />
+    <ClCompile Include="src\runtime\RuntimeBootstrap.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include=".gitignore" />

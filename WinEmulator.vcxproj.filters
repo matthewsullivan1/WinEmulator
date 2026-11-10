@@ -51,16 +51,25 @@
     <ClInclude Include="src\runtime\Process.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\windows\WindowsStructs.h">
+    <ClInclude Include="src\windows\WinStructs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\common\Types.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\windows\NtStructures.h">
+    <ClInclude Include="src\windows\NtStructs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\windows\WinTypes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\windows\PeStructs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\memory\MemoryConst.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\runtime\RuntimeBootstrap.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -84,6 +93,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\RuntimeBootstrap.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
