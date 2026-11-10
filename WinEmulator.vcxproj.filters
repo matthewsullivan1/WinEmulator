@@ -18,76 +18,77 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="GuestMemory.h">
+    <ClInclude Include="src\execution\Instruction.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="BasicBlock.h">
+    <ClInclude Include="src\loader\ApiSet.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Disassembler.h">
+    <ClInclude Include="src\loader\ImageContext.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Instruction.h">
+    <ClInclude Include="src\loader\Loader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="PECompat.h">
+    <ClInclude Include="src\loader\Module.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="PEFile.h">
+    <ClInclude Include="src\memory\GuestMemory.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="MemoryManager.h">
+    <ClInclude Include="src\memory\MemoryManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="MemoryStructs.h">
+    <ClInclude Include="src\memory\MemoryStructs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Loader.h">
+    <ClInclude Include="src\pe\PECompat.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Process.h">
+    <ClInclude Include="src\pe\PEFile.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ImageContext.h">
+    <ClInclude Include="src\runtime\Process.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ApiSet.h">
+    <ClInclude Include="src\windows\WindowsStructs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="WindowsStructs.h">
+    <ClInclude Include="src\common\Types.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\windows\NtStructures.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\windows\WinTypes.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="GuestMemory.cpp">
+    <ClCompile Include="src\loader\ApiSet.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Disassembler.cpp">
+    <ClCompile Include="src\loader\Loader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="main.cpp">
+    <ClCompile Include="src\memory\GuestMemory.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="PEFile.cpp">
+    <ClCompile Include="src\memory\MemoryManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="MemoryManager.cpp">
+    <ClCompile Include="src\pe\PEFile.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Loader.cpp">
+    <ClCompile Include="src\runtime\Process.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="mm_test.cpp">
-      <Filter>Test Files</Filter>
-    </ClCompile>
-    <ClCompile Include="LoaderTest.cpp">
-      <Filter>Test Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Process.cpp">
+    <ClCompile Include="src\main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ApiSet.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include=".gitignore" />
+    <None Include="WinEmulator.slnx" />
   </ItemGroup>
 </Project>
