@@ -19,6 +19,7 @@ namespace emu {
 			std::string hostDll;
 		};
 
+		std::vector<uint8_t> apiset_;
 		std::unordered_map<std::string, std::vector<HostMapping>> mappings_;
 
 

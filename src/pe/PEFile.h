@@ -19,6 +19,7 @@ public:
 	win::IMAGE_DOS_HEADER dosHeader() const;
 	win::IMAGE_NT_HEADERS ntHeaders() const;
 	std::optional<win::IMAGE_SECTION_HEADER> sectionHeader(size_t index) const;
+	uint16_t sections() { return numberOfSections_; }
 	std::span<const std::uint8_t> data() const;
 
 private:

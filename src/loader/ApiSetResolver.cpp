@@ -4,16 +4,42 @@
 #include "pe/PEFile.h"
 #include "LoaderConst.h"
 
+using win::IMAGE_SECTION_HEADER;
+using win::BYTE;
+
 namespace emu {
 
     bool ApiSetResolver::initialize(const std::filesystem::path& schemaPath) {
 
-        auto schema = PEFile::open(schemaPath);
-        if (!schema.has_value()) {
-
+        auto schemaOpt = PEFile::open(schemaPath);
+        if (!schemaOpt.has_value()) {
+            return false;
         }
 
+        auto schema = *schemaOpt;
 
+        // Iterate over sections
+        for (uint16_t i = 0; i < schema.sections(); i++){
+
+            auto section = schema.sectionHeader(i);
+
+            if (section && std::memcmp(section->Name, ".apiset", 7) == 0 && (section->Name[7] == '\0')) {
+
+                auto data = schema.data();
+                size_t offset = section->PointerToRawData;
+                size_t size = section->SizeOfRawData;
+
+                if (offset > data.size() || size > data.size() - offset) {
+                    return false;
+                }
+
+                std::span<const uint8_t> apiset = data.subspan(offset, size);
+                apiset_.assign(apiset.begin(), apiset.end());
+
+            }
+        
+
+        }
 
     }
 
