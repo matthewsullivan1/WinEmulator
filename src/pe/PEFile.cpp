@@ -85,7 +85,7 @@ IMAGE_NT_HEADERS PEFile::ntHeaders() const {
 
 std::optional<IMAGE_SECTION_HEADER> PEFile::sectionHeader(size_t index) const {
 	
-	if (index > numberOfSections_) {
+	if (index >= numberOfSections_) {
 		return std::nullopt;
 	}
 
@@ -260,7 +260,7 @@ std::expected<void, PEError> PEFile::validateSections() {
 			return std::unexpected(PEError::InvalidSectionTable);
 		}
 
-		uint64_t mappedSize = std::max(static_cast<uint64_t>(section->Misc.VirtualSize), static_cast<uint64_t>(section->SizeOfRawData);
+		uint64_t mappedSize = std::max(static_cast<uint64_t>(section->Misc.VirtualSize), static_cast<uint64_t>(section->SizeOfRawData));
 		uint64_t sectionEnd = static_cast<uint64_t>(section->VirtualAddress) + mappedSize;
 
 		if (sectionEnd > opt.SizeOfImage) {
@@ -272,7 +272,7 @@ std::expected<void, PEError> PEFile::validateSections() {
 		}
 
 		uint64_t alignment = opt.SectionAlignment;
-		previousEnd = ((sectionEnd + alignment - 1) / alignment) + alignment;
+		previousEnd = ((sectionEnd + alignment - 1) / alignment) * alignment;
 
 	}
 
