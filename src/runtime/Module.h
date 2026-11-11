@@ -26,6 +26,7 @@ namespace emu {
         std::filesystem::path path;
 
         ptr_t baseAddress = 0;
+        ptr_t preferredBase = 0;
         ptr_t entryPoint = 0;
         size_t sizeOfImage = 0;
 

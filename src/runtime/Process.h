@@ -1,55 +1,38 @@
 // Process.h
 #pragma once
 
-#include "MemoryManager.h"
-#include "GuestMemory.h"
-#include "ImageContext.h"
+#include "memory/MemoryManager.h"
+#include "runtime/ModuleManager.h"
+#include "memory/GuestMemory.h"
+#include "loader/ImageContext.h"
 
-class Process {
-public:
-	Process() : memoryManager_(memory_) {} 
+namespace emu {
 
-	MemoryManager& memory() {
-		return memoryManager_;
-	}
+	class Process {
+	public:
+		Process() : memoryManager_(memory_) {}
 
-	const MemoryManager& memory() const {
-		return memoryManager_;
-	}
+		MemoryManager& memory() {
+			return memoryManager_;
+		}
 
-	ImageContext* findImage(std::string name);
+		ModuleManager& modules() {
+			return moduleManager_;
+		}
 
-	const ImageContext* findImage(std::string name) const;
-	
-	ImageContext* addImage(std::string name);
+		const ModuleManager& modules() const {
+			return moduleManager_;
+		}
 
-	void setMainImage(ImageContext* ctx);
+		MemoryStatus initializePeb();
+		MemoryStatus linkModulesList();
 
-	ImageContext* mainImage() { return mainImage_; }
+	private:
+		GuestMemory memory_;
+		MemoryManager memoryManager_;
+		ModuleManager moduleManager_;
 
-	ImageContext* findImageByBase(uint64_t baseAddress);
-	const ImageContext* findImageByBase(uint64_t baseAddress) const;
-
-	MemoryStatus initializePeb();
-	MemoryStatus linkModulesList();
-	const uint64_t getPeb() { return pebAddress_; }
-
-	const std::vector<ImageContext*>& getLoadOrder() const { return loadOrder_; }
-
-
-
-private:
-	GuestMemory memory_;
-	MemoryManager memoryManager_;
-
-	ImageContext* mainImage_ = nullptr;
-	std::unordered_map<std::string, ImageContext> images_;
-	std::vector<ImageContext*> loadOrder_;
-
-	uint64_t pebAddress_ = 0;
-	uint64_t tebAddress_ = 0;
-	
-
-	static std::string normalizeModuleName(std::string name);
-};
-
+		uint64_t pebAddress_ = 0;
+		uint64_t tebAddress_ = 0;
+	};
+}
