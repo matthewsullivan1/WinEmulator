@@ -2,12 +2,12 @@
 #pragma once
 
 #include "runtime/Process.h"
-#include "ImageContext.h"
 #include "LoaderConst.h"
 #include "common/Types.h"
 #include "pe/PEFile.h"
 #include "windows/WinTypes.h"
 #include "runtime/ModuleManager.h"
+#include "ApiSetResolver.h"
 
 namespace emu {
     class Loader {
@@ -29,6 +29,7 @@ namespace emu {
 
     private:
         Process& process_;
+        ApiSetResolver apiSetResolver_;
     
         // loadExecutable, loadModule establish preconditions for these
         LoaderStatus loadImage(const PEFile& pe, Module& module);
@@ -37,7 +38,14 @@ namespace emu {
         LoaderStatus resolveImageImports(const PEFile&, Module& module);
         LoaderStatus setSectionProtections(const PEFile& pe, Module& module);
     
-    
+        static bool validImageRange(
+            uint64_t rva,
+            uint64_t size,
+            uint64_t imageSize)
+        {
+            return rva <= imageSize &&
+                size <= imageSize - rva;
+        }
     };
 }
 

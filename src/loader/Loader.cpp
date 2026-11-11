@@ -52,6 +52,8 @@ LoaderStatus Loader::loadImage(const PEFile& pe, Module& module) {
 		return status;
 	}
 
+
+	// Move to after protections are set
 	module.state = ModuleState::Loaded;
 
 	std::cout
@@ -68,14 +70,15 @@ LoaderStatus Loader::mapImage(const PEFile& pe, Module& module) {
 		return LoaderStatus::UnsupportedSectionAlignment;
 	}
 
+	auto nt = pe.ntHeaders();
+
 	// Reserve region for entire image
 	ptr_t imageBase = 0;
 
-
 	// Attempt to reserve region @ preferred base address
 	MemoryStatus status = process_.memory().reserve(
-		pe.ntHeaders().OptionalHeader.ImageBase,
-		pe.ntHeaders().OptionalHeader.SizeOfImage,
+		nt.OptionalHeader.ImageBase,
+		nt.OptionalHeader.SizeOfImage,
 		RegionType::Image,
 		PageProtection::ReadWrite,
 		&imageBase
@@ -85,7 +88,7 @@ LoaderStatus Loader::mapImage(const PEFile& pe, Module& module) {
 	if (status == MemoryStatus::AlreadyReserved) {
 		status = process_.memory().reserve(
 			0,
-			pe.ntHeaders().OptionalHeader.SizeOfImage,
+			nt.OptionalHeader.SizeOfImage,
 			RegionType::Image,
 			PageProtection::ReadWrite,
 			&imageBase
@@ -99,7 +102,7 @@ LoaderStatus Loader::mapImage(const PEFile& pe, Module& module) {
 	// Commit header subregion
 	status = process_.memory().commit(
 		imageBase,
-		pe.ntHeaders().OptionalHeader.SizeOfHeaders,
+		nt.OptionalHeader.SizeOfHeaders,
 		PageProtection::ReadWrite
 	);
 	
@@ -114,7 +117,7 @@ LoaderStatus Loader::mapImage(const PEFile& pe, Module& module) {
 	status = process_.memory().write(
 		imageBase,
 		pe.data().data(),
-		pe.ntHeaders().OptionalHeader.SizeOfHeaders
+		nt.OptionalHeader.SizeOfHeaders
 	);
 
 	if (status != MemoryStatus::Success) {
@@ -126,20 +129,17 @@ LoaderStatus Loader::mapImage(const PEFile& pe, Module& module) {
 
 	auto fileData = pe.data();
 
-	for (size_t i = 0; i < pe.ntHeaders().FileHeader.NumberOfSections; i++) {
+	for (size_t i = 0; i < nt.FileHeader.NumberOfSections; i++) {
 
 		auto sectionOpt = pe.sectionHeader(i);
 		
 		if (!sectionOpt) {
+
+			process_.memory().release(module.baseAddress);
 			return LoaderStatus::SectionReadFailed;
 		}
 
 		IMAGE_SECTION_HEADER section = *sectionOpt;
-
-		// Already checked earlier
-		//if (section.VirtualAddress % pe.ntHeaders().OptionalHeader.SectionAlignment != 0) {
-		//	return LoaderStatus::InvalidSectionAlignment;
-		//}
 		
 		uint64_t sectionDst = imageBase + section.VirtualAddress;
 
@@ -154,6 +154,7 @@ LoaderStatus Loader::mapImage(const PEFile& pe, Module& module) {
 			static_cast<size_t>(section.SizeOfRawData)
 		);
 
+		// Commit regardless of size of raw data
 		status = process_.memory().commit(
 			sectionDst,
 			mappedSize,
@@ -167,23 +168,31 @@ LoaderStatus Loader::mapImage(const PEFile& pe, Module& module) {
 			return LoaderStatus::ImageSectionCommitFailed;
 		}
 
-		status = process_.memory().write(
-			sectionDst,
-			sectionData.data(),
-			sectionData.size()
-		);
+		// Only write when data exists
+		if (section.SizeOfRawData != 0) {
+			status = process_.memory().write(
+				sectionDst,
+				sectionData.data(),
+				sectionData.size()
+			);
 
-		if (status != MemoryStatus::Success) {
-			
-			process_.memory().release(imageBase);
+			if (status != MemoryStatus::Success) {
 
-			return LoaderStatus::ImageSectionMapFailed;
+				process_.memory().release(imageBase);
+
+				return LoaderStatus::ImageSectionMapFailed;
+			}
 		}
+
 	}
 
 	module.baseAddress = imageBase;
-	module.preferredBase = pe.ntHeaders().OptionalHeader.ImageBase;
-	module.entryPoint = imageBase + pe.ntHeaders().OptionalHeader.AddressOfEntryPoint;
+
+	// ptr_t(0) reserved for modules with no entry point
+	module.entryPoint = nt.OptionalHeader.AddressOfEntryPoint == 0
+		? 0
+		: imageBase + nt.OptionalHeader.AddressOfEntryPoint;
+
 	module.sizeOfImage = pe.ntHeaders().OptionalHeader.SizeOfImage;
 
 	return LoaderStatus::Success;
@@ -191,56 +200,92 @@ LoaderStatus Loader::mapImage(const PEFile& pe, Module& module) {
 
 LoaderStatus Loader::relocateImage(const PEFile& pe, Module& module) {
 
+	auto nt = pe.ntHeaders();
+	ptr_t preferredBase = nt.OptionalHeader.ImageBase;
 	
-	if (module.baseAddress == module.preferredBase) {
+	if (module.baseAddress == preferredBase) {
 		return LoaderStatus::Success;
 	}
 
-	if (pe.ntHeaders().OptionalHeader.DataDirectory[win::IMAGE_DIRECTORY_ENTRY_BASERELOC].Size == 0) {
-		return LoaderStatus::Success;
+	// Relocs stripped & image isnt loaded at preferred base
+	if (nt.FileHeader.Characteristics & win::IMAGE_FILE_RELOCS_STRIPPED) {
+		return LoaderStatus::ImageRelocationFailed;
 	}
 
-	IMAGE_DATA_DIRECTORY relocationBase = pe.ntHeaders().OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
-	
+	if (nt.OptionalHeader.NumberOfRvaAndSizes <= win::IMAGE_DIRECTORY_ENTRY_BASERELOC) {
+		return LoaderStatus::ImageRelocationFailed;
+	}
+
+	auto relocationBase = nt.OptionalHeader.DataDirectory[win::IMAGE_DIRECTORY_ENTRY_BASERELOC];
+
 	if (relocationBase.VirtualAddress == 0 || relocationBase.Size == 0) {
-		return LoaderStatus::Success;
+		return LoaderStatus::ImageRelocationFailed;
 	}
 
-	uint64_t delta = module.baseAddress - module.preferredBase;
+	if (!validImageRange(
+		relocationBase.VirtualAddress,
+		relocationBase.Size,
+		module.sizeOfImage
+	)) {
+		return LoaderStatus::ImageRelocationFailed;
+	}
+
+
+	uint64_t delta = module.baseAddress - preferredBase;
 	ptr_t blockAddress = module.baseAddress + relocationBase.VirtualAddress;
 	ptr_t relocationEnd = blockAddress + relocationBase.Size;
 
+	ptr_t directoryAddress = module.baseAddress + relocationBase.VirtualAddress;
+	uint64_t offset = 0;
 
-	while (blockAddress < relocationEnd) {
+
+	while (offset < relocationBase.Size) {
+
+		uint64_t remaining = relocationBase.Size - offset;
+
+		if (remaining < sizeof(IMAGE_BASE_RELOCATION)) {
+			return LoaderStatus::ImageRelocationFailed;
+		}
 		
-		IMAGE_BASE_RELOCATION block;
+		IMAGE_BASE_RELOCATION block{};
 
 		MemoryStatus status = process_.memory().read(
-			blockAddress,
+			directoryAddress + offset,
 			&block,
-			sizeof(IMAGE_BASE_RELOCATION)
+			sizeof(block)
 		);
 
-		if (status != MemoryStatus::Success || block.SizeOfBlock < sizeof(IMAGE_BASE_RELOCATION)) {
+		if (status != MemoryStatus::Success) {
 			return LoaderStatus::ImageRelocationFailed;
 		}
 
-		DWORD count = (block.SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / sizeof(WORD);
+		if (block.SizeOfBlock < sizeof(block) || block.SizeOfBlock > remaining) {
+			return LoaderStatus::ImageRelocationFailed;
+		}
+
+		uint64_t len = block.SizeOfBlock - sizeof(block);
+
+		// # of entries not being multiple of 16 bits indicates malformed block
+		if (len % sizeof(WORD) != 0) {
+			return LoaderStatus::ImageRelocationFailed;
+		}
+
+		DWORD count = len / sizeof(WORD);
 
 		for (size_t i = 0; i < count; i++) {
 			
-			WORD entry;
+			WORD entry{};
 
 			status = process_.memory().read(
-				blockAddress + sizeof(IMAGE_BASE_RELOCATION) + (i * sizeof(WORD)),
+				directoryAddress + offset + sizeof(IMAGE_BASE_RELOCATION) + i * sizeof(WORD),
 				&entry,
-				sizeof(WORD)
+				sizeof(entry)
 			);
 
 			if (status != MemoryStatus::Success) return LoaderStatus::ImageRelocationFailed;
 
 			WORD type = entry >> 12;
-			WORD offset = entry & 0x0FFF;
+			WORD entryOffset = entry & 0x0FFF;
 
 			if (type == win::IMAGE_REL_BASED_ABSOLUTE) {
 				continue;
@@ -250,17 +295,25 @@ LoaderStatus Loader::relocateImage(const PEFile& pe, Module& module) {
 				return LoaderStatus::UnsupportedRelocationType;
 			}
 
-			ptr_t patchAddr = module.baseAddress + block.VirtualAddress + offset;
-			ptr_t fix;
+			ptr_t patchRva = uint64_t(block.VirtualAddress) + entryOffset;
+
+			if (!validImageRange(patchRva, sizeof(uint64_t), module.sizeOfImage)) {
+				return LoaderStatus::ImageRelocationFailed;
+			}
+
+			ptr_t patchAddr = module.baseAddress + patchRva;
+			uint64_t fix{};
 
 			// Read fix = (guest)*patchAddr
 			status = process_.memory().read(
 				patchAddr,
 				&fix,
-				sizeof(ptr_t)
+				sizeof(fix)
 			);
 
-			if (status != MemoryStatus::Success) return LoaderStatus::ImageRelocationFailed;
+			if (status != MemoryStatus::Success) {
+				return LoaderStatus::ImageRelocationFailed;
+			}
 
 			// apply patch
 			fix += delta;
@@ -269,19 +322,22 @@ LoaderStatus Loader::relocateImage(const PEFile& pe, Module& module) {
 			status = process_.memory().write(
 				patchAddr,
 				&fix,
-				sizeof(ptr_t)
+				sizeof(fix)
 			);
 
-			if (status != MemoryStatus::Success) return LoaderStatus::ImageRelocationFailed;
+			if (status != MemoryStatus::Success) {
+				return LoaderStatus::ImageRelocationFailed;
+			}
+
 		}
 
-		blockAddress += block.SizeOfBlock;
+		offset += block.SizeOfBlock;
 
 	}
 
 	std::cout
 		<< "[RELOC] " << module.name
-		<< " 0x" << std::hex << module.preferredBase
+		<< " 0x" << std::hex << preferredBase
 		<< " -> 0x" << module.baseAddress
 		<< std::dec << '\n';
 
