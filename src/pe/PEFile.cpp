@@ -276,5 +276,7 @@ std::expected<void, PEError> PEFile::validateSections() {
 
 	}
 
+	numberOfSections_ = nt->FileHeader.NumberOfSections;
+
 	return {};
 }
