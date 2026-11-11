@@ -5,3 +5,6 @@ x64/
 *.vcxproj.filters
 guest/windows/
 OLD/
+
+packages/
+packages.config
