@@ -4,7 +4,6 @@
 #include "memory/MemoryManager.h"
 #include "runtime/ModuleManager.h"
 #include "memory/GuestMemory.h"
-#include "loader/ImageContext.h"
 
 namespace emu {
 
