@@ -6,47 +6,100 @@
 #include <iostream>
 #include <filesystem>
 
-LoaderStatus Loader::mapImage(PEFile& pe, ImageContext* ctx) {
-	if (ctx == nullptr) {
-		return LoaderStatus::InvalidImageContext;
+using win::IMAGE_SECTION_HEADER;
+using win::IMAGE_DATA_DIRECTORY;
+using win::IMAGE_BASE_RELOCATION;
+using win::IMAGE_IMPORT_DESCRIPTOR;
+
+using win::IMAGE_DIRECTORY_ENTRY_BASERELOC;
+
+using win::WORD;
+using win::DWORD;
+
+namespace emu {
+
+
+LoaderStatus Loader::loadImage(const PEFile& pe, Module& module) {
+
+
+	std::cout
+		<< "[LOAD] " << module.name
+		<< '\n';
+
+	module.state = ModuleState::Loading;
+
+	LoaderStatus status = mapImage(pe, module);
+	if (status != LoaderStatus::Success) {
+		std::cout
+			<< "[ERROR] Failed to map " << module.name
+			<< " (status " << loaderStatusString(status) << ")\n";
+		return status;
 	}
 
-	uint32_t alignment = pe.optionalHeader()->SectionAlignment;
+	status = relocateImage(pe, module);
+	if (status != LoaderStatus::Success) {
+		std::cout
+			<< "[ERROR] Failed to relocate " << module.name
+			<< " (status " << loaderStatusString(status) << ")\n";
+		return status;
+	}
 
-	if (alignment != PAGE_SIZE || alignment % PAGE_SIZE != 0) {
+	status = resolveImageImports(pe, module);
+	if (status != LoaderStatus::Success) {
+		std::cout
+			<< "[ERROR] Failed imports for " << module.name
+			<< " (status " << loaderStatusString(status) << ")\n";
+		return status;
+	}
+
+	module.state = ModuleState::Loaded;
+
+	std::cout
+		<< "[DONE] " << module.name
+		<< '\n';
+
+	return LoaderStatus::Success;
+}
+
+
+LoaderStatus Loader::mapImage(const PEFile& pe, Module& module) {
+
+	if (pe.ntHeaders().OptionalHeader.SectionAlignment != PAGE_SIZE) {
 		return LoaderStatus::UnsupportedSectionAlignment;
 	}
 
 	// Reserve region for entire image
-	uint64_t imageBase = 0;
+	ptr_t imageBase = 0;
 
+
+	// Attempt to reserve region @ preferred base address
 	MemoryStatus status = process_.memory().reserve(
-		pe.ntHeaders()->OptionalHeader.ImageBase, 
-		pe.ntHeaders()->OptionalHeader.SizeOfImage, 
+		pe.ntHeaders().OptionalHeader.ImageBase,
+		pe.ntHeaders().OptionalHeader.SizeOfImage,
 		RegionType::Image,
+		PageProtection::ReadWrite,
 		&imageBase
 	);
 	
+	// Let memory manager pick an address (preferred base isnt available)
 	if (status == MemoryStatus::AlreadyReserved) {
 		status = process_.memory().reserve(
 			0,
-			pe.ntHeaders()->OptionalHeader.SizeOfImage,
+			pe.ntHeaders().OptionalHeader.SizeOfImage,
 			RegionType::Image,
+			PageProtection::ReadWrite,
 			&imageBase
 		);
-
-		if (status != MemoryStatus::Success) {
-			return LoaderStatus::ImageReservationFailed;
-		}
 	}
-	else if (status != MemoryStatus::Success) {
+	
+	if (status != MemoryStatus::Success) {
 		return LoaderStatus::ImageReservationFailed;
 	}
 
 	// Commit header subregion
 	status = process_.memory().commit(
 		imageBase,
-		pe.ntHeaders()->OptionalHeader.SizeOfHeaders,
+		pe.ntHeaders().OptionalHeader.SizeOfHeaders,
 		PageProtection::ReadWrite
 	);
 	
@@ -61,7 +114,7 @@ LoaderStatus Loader::mapImage(PEFile& pe, ImageContext* ctx) {
 	status = process_.memory().write(
 		imageBase,
 		pe.data().data(),
-		pe.ntHeaders()->OptionalHeader.SizeOfHeaders
+		pe.ntHeaders().OptionalHeader.SizeOfHeaders
 	);
 
 	if (status != MemoryStatus::Success) {
@@ -73,14 +126,24 @@ LoaderStatus Loader::mapImage(PEFile& pe, ImageContext* ctx) {
 
 	auto fileData = pe.data();
 
-	for (const auto& section : pe.sections()) {
+	for (size_t i = 0; i < pe.ntHeaders().FileHeader.NumberOfSections; i++) {
 
-		if (section.VirtualAddress % pe.optionalHeader()->SectionAlignment != 0) {
-			return LoaderStatus::InvalidSectionAlignment;
+		auto sectionOpt = pe.sectionHeader(i);
+		
+		if (!sectionOpt) {
+			return LoaderStatus::SectionReadFailed;
 		}
+
+		IMAGE_SECTION_HEADER section = *sectionOpt;
+
+		// Already checked earlier
+		//if (section.VirtualAddress % pe.ntHeaders().OptionalHeader.SectionAlignment != 0) {
+		//	return LoaderStatus::InvalidSectionAlignment;
+		//}
 		
 		uint64_t sectionDst = imageBase + section.VirtualAddress;
 
+		// Check for zero size? 
 		auto sectionData = fileData.subspan(
 			section.PointerToRawData,
 			section.SizeOfRawData
@@ -118,116 +181,95 @@ LoaderStatus Loader::mapImage(PEFile& pe, ImageContext* ctx) {
 		}
 	}
 
-	ctx->baseAddress = imageBase;
-	ctx->preferredBase = pe.ntHeaders()->OptionalHeader.ImageBase;
-	ctx->entryPoint = imageBase + pe.entryPointRva();
-	ctx->size = pe.ntHeaders()->OptionalHeader.SizeOfImage;
+	module.baseAddress = imageBase;
+	module.preferredBase = pe.ntHeaders().OptionalHeader.ImageBase;
+	module.entryPoint = imageBase + pe.ntHeaders().OptionalHeader.AddressOfEntryPoint;
+	module.sizeOfImage = pe.ntHeaders().OptionalHeader.SizeOfImage;
 
 	return LoaderStatus::Success;
 }
 
-LoaderStatus Loader::relocateImage(ImageContext* ctx) {
-	if (ctx == nullptr) {
-		std::cout << "InvalidImageContext: loader.relocateImage()" << std::endl;
-		return LoaderStatus::InvalidImageContext;
-	}
+LoaderStatus Loader::relocateImage(const PEFile& pe, Module& module) {
+
 	
-	if (ctx->baseAddress == ctx->preferredBase) {
+	if (module.baseAddress == module.preferredBase) {
 		return LoaderStatus::Success;
 	}
 
-	IMAGE_DOS_HEADER dos;
-	MemoryStatus status = process_.memory().read(
-		ctx->baseAddress,
-		&dos,
-		sizeof(IMAGE_DOS_HEADER)
-	);
-
-	if (status != MemoryStatus::Success) {
-		return LoaderStatus::ImageRelocationFailed;
-	}
-
-	IMAGE_NT_HEADERS64 nt;
-	status = process_.memory().read(
-		ctx->baseAddress + dos.e_lfanew,
-		&nt,
-		sizeof(IMAGE_NT_HEADERS64)
-	);
-	
-	if (status != MemoryStatus::Success) {
-		return LoaderStatus::ImageRelocationFailed;
-	}
-
-	if (nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size == 0) {
+	if (pe.ntHeaders().OptionalHeader.DataDirectory[win::IMAGE_DIRECTORY_ENTRY_BASERELOC].Size == 0) {
 		return LoaderStatus::Success;
 	}
 
-	IMAGE_DATA_DIRECTORY relocationBase = nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
+	IMAGE_DATA_DIRECTORY relocationBase = pe.ntHeaders().OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
 	
 	if (relocationBase.VirtualAddress == 0 || relocationBase.Size == 0) {
 		return LoaderStatus::Success;
 	}
 
-	uint64_t delta = ctx->baseAddress - ctx->preferredBase;
-	uint64_t blockAddress = ctx->baseAddress + relocationBase.VirtualAddress;
-	uint64_t relocationEnd = blockAddress + relocationBase.Size;
+	uint64_t delta = module.baseAddress - module.preferredBase;
+	ptr_t blockAddress = module.baseAddress + relocationBase.VirtualAddress;
+	ptr_t relocationEnd = blockAddress + relocationBase.Size;
 
 
 	while (blockAddress < relocationEnd) {
 		
 		IMAGE_BASE_RELOCATION block;
 
-		status = process_.memory().read(
+		MemoryStatus status = process_.memory().read(
 			blockAddress,
 			&block,
 			sizeof(IMAGE_BASE_RELOCATION)
 		);
 
-		if (status != MemoryStatus::Success) return LoaderStatus::ImageRelocationFailed;
-		if (block.SizeOfBlock < sizeof(IMAGE_BASE_RELOCATION)) return LoaderStatus::ImageRelocationFailed;
+		if (status != MemoryStatus::Success || block.SizeOfBlock < sizeof(IMAGE_BASE_RELOCATION)) {
+			return LoaderStatus::ImageRelocationFailed;
+		}
 
-		size_t count = (block.SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / sizeof(uint16_t);
+		DWORD count = (block.SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / sizeof(WORD);
 
 		for (size_t i = 0; i < count; i++) {
 			
-			uint16_t entry;
+			WORD entry;
 
 			status = process_.memory().read(
-				blockAddress + sizeof(IMAGE_BASE_RELOCATION) + (i * sizeof(entry)),
+				blockAddress + sizeof(IMAGE_BASE_RELOCATION) + (i * sizeof(WORD)),
 				&entry,
-				sizeof(entry)
+				sizeof(WORD)
 			);
 
 			if (status != MemoryStatus::Success) return LoaderStatus::ImageRelocationFailed;
 
-			uint16_t type = entry >> 12;
-			uint16_t offset = entry & 0x0FFF;
+			WORD type = entry >> 12;
+			WORD offset = entry & 0x0FFF;
 
-			if (type == IMAGE_REL_BASED_ABSOLUTE) {
+			if (type == win::IMAGE_REL_BASED_ABSOLUTE) {
 				continue;
 			}
 
-			if (type != IMAGE_REL_BASED_DIR64) { // only relocation that 64 bit PEs use (aside from padding) 
+			if (type != win::IMAGE_REL_BASED_DIR64) { // only relocation that 64 bit PEs use (aside from padding) 
 				return LoaderStatus::UnsupportedRelocationType;
 			}
 
-			uint64_t patchAddr = ctx->baseAddress + block.VirtualAddress + offset;
-			uint64_t fix;
+			ptr_t patchAddr = module.baseAddress + block.VirtualAddress + offset;
+			ptr_t fix;
 
+			// Read fix = (guest)*patchAddr
 			status = process_.memory().read(
 				patchAddr,
 				&fix,
-				sizeof(uint64_t)
+				sizeof(ptr_t)
 			);
 
 			if (status != MemoryStatus::Success) return LoaderStatus::ImageRelocationFailed;
 
+			// apply patch
 			fix += delta;
 
+			// Write back patch
 			status = process_.memory().write(
 				patchAddr,
 				&fix,
-				sizeof(uint64_t)
+				sizeof(ptr_t)
 			);
 
 			if (status != MemoryStatus::Success) return LoaderStatus::ImageRelocationFailed;
@@ -238,51 +280,29 @@ LoaderStatus Loader::relocateImage(ImageContext* ctx) {
 	}
 
 	std::cout
-		<< "[RELOC] " << ctx->name
-		<< " 0x" << std::hex << ctx->preferredBase
-		<< " -> 0x" << ctx->baseAddress
+		<< "[RELOC] " << module.name
+		<< " 0x" << std::hex << module.preferredBase
+		<< " -> 0x" << module.baseAddress
 		<< std::dec << '\n';
 
 	return LoaderStatus::Success;
 }
 
-LoaderStatus Loader::resolveImageImports(ImageContext* ctx) {
+LoaderStatus Loader::resolveImageImports(const PEFile& pe, Module& module) {
 	
-	if (ctx == nullptr) {
-		return LoaderStatus::InvalidImageContext;
-	}
-
-	IMAGE_DOS_HEADER dos;
-	IMAGE_NT_HEADERS64 nt;
-
-	MemoryStatus status = process_.memory().read(
-		ctx->baseAddress,
-		&dos,
-		sizeof(IMAGE_DOS_HEADER)
-	);
-
-	if (status != MemoryStatus::Success) return LoaderStatus::InvalidImage;
-
-	status = process_.memory().read(
-		ctx->baseAddress + dos.e_lfanew,
-		&nt,
-		sizeof(IMAGE_NT_HEADERS64)
-	);
-
-	if (status != MemoryStatus::Success) return LoaderStatus::InvalidImage;
-	
-	const IMAGE_DATA_DIRECTORY& importDirectory = nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+	IMAGE_DATA_DIRECTORY importDirectory = pe.ntHeaders().OptionalHeader.DataDirectory[win::IMAGE_DIRECTORY_ENTRY_IMPORT];
 
 	if (importDirectory.VirtualAddress == 0) return LoaderStatus::Success;
 
-	uint64_t pImport = ctx->baseAddress + importDirectory.VirtualAddress;
+	// First descriptor address
+	ptr_t pImport = module.baseAddress + importDirectory.VirtualAddress;
 
 
 	while (true) {
 
 		IMAGE_IMPORT_DESCRIPTOR import;
 
-		status = process_.memory().read(
+		MemoryStatus status = process_.memory().read(
 			pImport,
 			&import,
 			sizeof(IMAGE_IMPORT_DESCRIPTOR)
@@ -294,7 +314,7 @@ LoaderStatus Loader::resolveImageImports(ImageContext* ctx) {
 			break;
 		}
 		
-		uint64_t moduleNameAddr = ctx->baseAddress + import.Name;
+		ptr_t moduleNameAddr = module.baseAddress + import.Name;
 		std::string moduleName;
 
 		status = process_.memory().readString(
@@ -303,15 +323,7 @@ LoaderStatus Loader::resolveImageImports(ImageContext* ctx) {
 			260
 		);
 
-		if (status != MemoryStatus::Success) {
-
-			std::cout
-				<< "[ERROR] Failed to read import module name\n"
-				<< "        image:  " << ctx->name << '\n'
-				<< "        status: " << static_cast<int>(status) << '\n';
-
-			return LoaderStatus::ImportDescriptorError;
-		}
+		if (status != MemoryStatus::Success) { return LoaderStatus::ImportDescriptorError; }
 
 		if (ApiSet::isContract(moduleName)) {
 
@@ -508,55 +520,7 @@ LoaderStatus Loader::resolveImageImports(ImageContext* ctx) {
 	return LoaderStatus::Success;
 }
 
-LoaderStatus Loader::loadImage(PEFile& pe, ImageContext* ctx) {
 
-	if (ctx == nullptr) {
-		std::cout << "[ERROR] Invalid image context in loadImage()\n";
-		return LoaderStatus::InvalidImageContext;
-	}
-
-	std::cout
-		<< "[LOAD] " << ctx->name
-		<< '\n';
-
-	ctx->state = ImageState::Loading;
-
-	LoaderStatus status = mapImage(pe, ctx);
-	if (status != LoaderStatus::Success) {
-		std::cout
-			<< "[ERROR] Failed to map " << ctx->name
-			<< " (status " << loaderStatusString(status) << ")\n";
-		return status;
-	}
-
-	std::cout
-		<< "       base: 0x" << std::hex << ctx->baseAddress
-		<< std::dec << '\n';
-
-	status = relocateImage(ctx);
-	if (status != LoaderStatus::Success) {
-		std::cout
-			<< "[ERROR] Failed to relocate " << ctx->name
-			<< " (status " << loaderStatusString(status) << ")\n";
-		return status;
-	}
-
-	status = resolveImageImports(ctx);
-	if (status != LoaderStatus::Success) {
-		std::cout
-			<< "[ERROR] Failed imports for " << ctx->name
-			<< " (status " << loaderStatusString(status) << ")\n";
-		return status;
-	}
-
-	ctx->state = ImageState::Loaded;
-
-	std::cout
-		<< "[DONE] " << ctx->name
-		<< '\n';
-
-	return LoaderStatus::Success;
-}
 
 LoaderStatus Loader::loadExecutable(std::filesystem::path path) {
 
@@ -1044,3 +1008,4 @@ LoaderStatus Loader::setSectionProtections() {
 }
 
 
+}

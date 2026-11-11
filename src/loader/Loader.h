@@ -1,46 +1,45 @@
 // Loader.h
 #pragma once
 
-#include "Process.h"
-
+#include "runtime/Process.h"
 #include "ImageContext.h"
 #include "LoaderConst.h"
 #include "common/Types.h"
-#include "windows/PeStructs.h"
+#include "pe/PEFile.h"
+#include "windows/WinTypes.h"
+#include "runtime/ModuleManager.h"
 
-// struct ExportContext {
-//     DWORD directoryRva = 0;
-//     DWORD directorySize = 0;
-//     IMAGE_EXPORT_DIRECTORY directory;
-// };
+namespace emu {
+    class Loader {
+    public:
+        explicit Loader(Process& process) : process_(process) {};
+      
+        std::optional<std::filesystem::path> findImagePath(const std::string& name);
+        LoaderStatus loadExecutable(std::filesystem::path path);
+        LoaderStatus loadModule(const std::string& name, ImageContext** ctxOut);
+        LoaderStatus getExportContext(uint64_t hmodule, ExportContext& out);
 
+        LoaderStatus resolveProcAddress(uint64_t hmodule, const std::string& name, uint64_t* addrOut, size_t depth = 0);
+        LoaderStatus resolveProcAddress(uint64_t hmodule, win::WORD ordinal, uint64_t* addrOut, size_t depth = 0);
+        LoaderStatus resolveForwarder(const std::string& forwarder, uint64_t parentModuleBase, uint64_t* addrOut, size_t depth = 0);
+        LoaderStatus resolveExportRva(uint64_t hmodule, win::DWORD functionRva, win::DWORD exportDirRva, win::DWORD exportDirSize, uint64_t* addrOut, size_t depth = 0);
 
-class Loader {
-public:
-	explicit Loader(Process& process) : process_(process) {};
-
-    LoaderStatus mapImage(PEFile& pe, ImageContext* ctx);
-    LoaderStatus relocateImage(ImageContext* ctx);
-    LoaderStatus resolveImageImports(ImageContext* ctx);
-    std::optional<std::filesystem::path> findImagePath(const std::string& name);
-
-    LoaderStatus loadImage(PEFile& pe, ImageContext* ctx);
-    LoaderStatus loadExecutable(std::filesystem::path path);
-    LoaderStatus loadModule(const std::string& name, ImageContext** ctxOut);
-    LoaderStatus getExportContext(uint64_t hmodule, ExportContext& out);
-
-    LoaderStatus resolveProcAddress(uint64_t hmodule, const std::string& name, uint64_t* addrOut, size_t depth = 0);
-    LoaderStatus resolveProcAddress(uint64_t hmodule, WORD ordinal, uint64_t* addrOut, size_t depth = 0);
-    LoaderStatus resolveForwarder(const std::string& forwarder, uint64_t parentModuleBase, uint64_t* addrOut, size_t depth = 0);
-    LoaderStatus resolveExportRva(uint64_t hmodule, DWORD functionRva, DWORD exportDirRva, DWORD exportDirSize, uint64_t* addrOut, size_t depth = 0);
-
-    LoaderStatus setSectionProtections();
+        
 
 
-private:
-    Process& process_; 
-};
-
+    private:
+        Process& process_;
+    
+        // loadExecutable, loadModule establish preconditions for these
+        LoaderStatus loadImage(const PEFile& pe, Module& module);
+        LoaderStatus mapImage(const PEFile& pe, Module& module);
+        LoaderStatus relocateImage(const PEFile& pe, Module& module);
+        LoaderStatus resolveImageImports(const PEFile&, Module& module);
+        LoaderStatus setSectionProtections(const PEFile& pe, Module& module);
+    
+    
+    };
+}
 
 /*
 Loader steps from windows internals
