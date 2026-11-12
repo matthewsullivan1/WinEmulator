@@ -14,14 +14,15 @@ namespace emu {
 		std::optional<std::string> resolve(const std::string& contract, const std::string& importingModule) const;
 
 	private:
+
+
 		struct HostMapping {
 			std::string importingModule;
 			std::string hostDll;
 		};
 
+		// raw data of apisetschema.dll .apiset section
 		std::vector<uint8_t> apiset_;
-		std::unordered_map<std::string, std::vector<HostMapping>> mappings_;
-
 
 	};
 }

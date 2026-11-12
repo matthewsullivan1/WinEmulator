@@ -2,13 +2,15 @@
 
 #include <cstdint>
 #include <optional>
+#include "common/Types.h"
+
 
 namespace emu {
 
-    constexpr uint64_t PAGE_SIZE = 0x1000;
-    constexpr uint64_t ALLOCATION_GRANULARITY = 0x10000;
-    constexpr ptr_t DYNAMIC_BASE = 0x10000;
-    constexpr ptr_t MAX_USER_ADDRESS_EXCLUSIVE = 0x0000800000000000;
+    inline constexpr uint64_t PAGE_SIZE = 0x1000;
+    inline constexpr uint64_t ALLOCATION_GRANULARITY = 0x10000;
+    inline constexpr ptr_t DYNAMIC_BASE = 0x10000;
+    inline constexpr ptr_t MAX_USER_ADDRESS_EXCLUSIVE = 0x0000800000000000;
 
     enum class RegionType {
         Private,

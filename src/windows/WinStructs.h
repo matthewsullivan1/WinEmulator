@@ -50,9 +50,40 @@ namespace win {
 		UNICODE_STRING BaseDllName;
 	};
 
-	//struct RTL_USER_PROCESS_PARAMETERS {
-	//	BYTE Reserved1[16];
-	//	PVOID
-	//};
+	struct API_SET_NAMESPACE {
+		ULONG Version;
+		ULONG Size;
+		ULONG Flags;
+		ULONG Count;
+		ULONG EntryOffset;
+		ULONG HashOffset;
+		ULONG HashFactor;
+	};
+
+	struct API_SET_NAMESPACE_ENTRY {
+		ULONG Flags;
+		ULONG NameOffset;
+		ULONG NameLength;
+		ULONG HashedLength;
+		ULONG ValueOffset;
+		ULONG ValueCount;
+	};
+
+	struct API_SET_HASH_ENTRY {
+		ULONG Flags;
+		ULONG NameOffset;
+		ULONG NameLength;
+		ULONG HashedLength;
+		ULONG ValueOffset;
+		ULONG ValueCount;
+	};
+
+	struct API_SET_VALUE_ENTRY {
+		ULONG Flags;
+		ULONG NameOffset;
+		ULONG NameLength;
+		ULONG ValueOffset;
+		ULONG ValueLength;
+	};
 
 };

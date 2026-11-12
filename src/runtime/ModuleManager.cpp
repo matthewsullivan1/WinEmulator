@@ -1,8 +1,4 @@
-#pragma once
-
 #include <string>
-
-
 #include "ModuleManager.h"
 
 namespace emu {

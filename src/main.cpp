@@ -1,10 +1,25 @@
-#include "common/Types.h"
-#include "loader/Loader.h"
-#include "memory/MemoryManager.h"
-#include "runtime/Process.h"
+//#include "common/Types.h"
+//#include "loader/Loader.h"
+//#include "memory/MemoryManager.h"
+//#include "runtime/Process.h"
 
+#include "loader/ApiSetResolver.h"
 
 int main() {
+
+	emu::ApiSetResolver a;
+	const std::filesystem::path path = "guest/windows/system32/apisetschema.dll";
+	const std::string contract = "api-ms-win-core-file-l1-2-0.dll";
+
+
+	if (!a.initialize(path)) {
+		return 1;
+	}
+
+	a.resolve(contract, "b");
+
+
+
 
 	return 0;
 }

@@ -2,6 +2,7 @@
 #pragma once
 #include <map>
 #include <optional>
+#include <string>
 
 #include "MemoryStructs.h"
 #include "GuestMemory.h"
