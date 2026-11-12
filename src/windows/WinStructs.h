@@ -70,12 +70,8 @@ namespace win {
 	};
 
 	struct API_SET_HASH_ENTRY {
-		ULONG Flags;
-		ULONG NameOffset;
-		ULONG NameLength;
-		ULONG HashedLength;
-		ULONG ValueOffset;
-		ULONG ValueCount;
+		ULONG Hash;
+		ULONG Index;
 	};
 
 	struct API_SET_VALUE_ENTRY {
