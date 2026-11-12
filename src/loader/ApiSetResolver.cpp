@@ -92,8 +92,10 @@ namespace emu {
         };
 
         auto getEntry = [&](size_t i) {
-            return readStruct<API_SET_NAMESPACE_ENTRY>(data, header->EntryOffset + i * sizeof(API_SET_NAMESPACE_ENTRY);
+            return readStruct<API_SET_NAMESPACE_ENTRY>(data, header->EntryOffset + i * sizeof(API_SET_NAMESPACE_ENTRY));
         };
+
+        
 
         size_t low = 0;
         size_t high = header->Count;
@@ -120,6 +122,7 @@ namespace emu {
 
 
 
+    // Helpers only used by ApiSetResolver
     namespace {
 
         bool validSchemaRange(size_t offset, size_t size, size_t total) {
@@ -130,27 +133,22 @@ namespace emu {
             return elementSize != 0 && offset <= size && count <= (size - offset) / elementSize;
         }
 
-        template<typename T>
-        std::optional<T> readStruct(
-            std::span<const uint8_t> data, size_t offset)
-        {
-            if (!validRange(offset, sizeof(T), data.size()))
+        template<typename T> std::optional<T> readStruct(std::span<const uint8_t> data, size_t offset) {
+            
+            if (!validRange(offset, sizeof(T), data.size())){
                 return std::nullopt;
+            }
 
             T result{};
             std::memcpy(&result, data.data() + offset, sizeof(T));
             return result;
         }
 
-        // Simplified UTF-16LE reader for ASCII module names.
-        // Replace with your existing general readUtf16 helper if preferred.
-        std::optional<std::string> readUtf16(
-            std::span<const uint8_t> data,
-            uint32_t offset, uint32_t length)
-        {
-            if (length % 2 != 0 ||
-                !validSchemaRange(offset, length, data.size()))
+        std::optional<std::string> readUtf16(std::span<const uint8_t> data, uint32_t offset, uint32_t length) {
+            
+            if (length % 2 != 0 || !validSchemaRange(offset, length, data.size())) {
                 return std::nullopt;
+            }
 
             std::string result;
             result.reserve(length / 2);
@@ -160,7 +158,7 @@ namespace emu {
                 uint8_t hi = data[offset + i + 1];
 
                 if (hi != 0 || lo > 0x7F)
-                    return std::nullopt; // Non-ASCII
+                    return std::nullopt;
 
                 result.push_back(static_cast<char>(lo));
             }
