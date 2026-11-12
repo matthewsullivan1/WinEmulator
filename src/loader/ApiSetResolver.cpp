@@ -72,6 +72,47 @@ namespace emu {
         }
 
 
+        // Remove version 
+        size_t dash = contract.rfind('-');
+        if (dash == std::string::npos || dash == 0 || dash + 1 == normalizedContract.size()) {
+            return std::nullopt;
+        }
+
+        std::string hashedName = contract.substr(0, dash);
+
+        uint32_t targetHash = 0;
+
+        for (unsigned char c : hashedName) {
+            targetHash = targetHash * header->HashFactor + c;
+        }
+
+
+        auto getHash = [&](size_t i) {
+            return readStruct<API_SET_HASH_ENTRY>(data, header->HashOffset + i * sizeof(API_SET_HASH_ENTRY));
+        };
+
+        auto getEntry = [&](size_t i) {
+            return readStruct<API_SET_NAMESPACE_ENTRY>(data, header->EntryOffset + i * sizeof(API_SET_NAMESPACE_ENTRY);
+        };
+
+        size_t low = 0;
+        size_t high = header->Count;
+
+        while (low < high) {
+            size_t mid = low + (high - low) / 2;
+
+            auto hashEntry = getHash(mid);
+            if (!hashEntry) {
+                return std::nullopt;
+            }
+
+            if (hashEntry->)
+        }
+
+
+
+
+
 
 
 
