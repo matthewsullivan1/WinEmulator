@@ -12,12 +12,12 @@
 namespace emu {
     class Loader {
     public:
-        explicit Loader(Process& process) : process_(process) {};
+        explicit Loader(Process& process, ApiSetResolver& apisetresolver) : process_(process), apiSetResolver_(apisetresolver) {};
       
         std::optional<std::filesystem::path> findImagePath(const std::string& name);
         LoaderStatus loadExecutable(std::filesystem::path path);
-        //LoaderStatus loadModule(const std::string& name, ImageContext** ctxOut);
-        //LoaderStatus getExportContext(uint64_t hmodule, ExportContext& out);
+        LoaderStatus loadModule(const std::string& name, Module** moduleOut);
+        LoaderStatus getExportContext(uint64_t hmodule, IMAGE_EXPORT_DIRECTORY* out);
 
         LoaderStatus resolveProcAddress(uint64_t hmodule, const std::string& name, uint64_t* addrOut, size_t depth = 0);
         LoaderStatus resolveProcAddress(uint64_t hmodule, win::WORD ordinal, uint64_t* addrOut, size_t depth = 0);
@@ -29,7 +29,7 @@ namespace emu {
 
     private:
         Process& process_;
-        ApiSetResolver apiSetResolver_;
+        ApiSetResolver& apiSetResolver_;
     
         // loadExecutable, loadModule establish preconditions for these
         LoaderStatus loadImage(const PEFile& pe, Module& module);

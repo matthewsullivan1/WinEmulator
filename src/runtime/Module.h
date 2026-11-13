@@ -31,5 +31,7 @@ namespace emu {
 
         ImageType type = ImageType::DLL;
         ModuleState state = ModuleState::Loading;
+
+        std::vector<Module*> dependencies;
     };
 }; 
