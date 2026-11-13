@@ -3,7 +3,7 @@ x64/
 *.vcxproj
 *.vcxproj.user
 *.vcxproj.filters
-guest/windows/
+guest/windows/system32/
 OLD/
 
 packages/
