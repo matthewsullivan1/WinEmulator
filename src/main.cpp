@@ -4,22 +4,59 @@
 //#include "runtime/Process.h"
 
 #include "loader/ApiSetResolver.h"
+#include "loader/Loader.h"
+
+#include <array>
+#include <string_view>
+#include <iostream>
+
+void testApiSetResolver(const emu::ApiSetResolver& resolver) {
+    struct TestCase {
+        std::string_view contract;
+        std::string_view importer;
+        bool expectSuccess;
+    };
+
+    constexpr std::array tests = {
+        TestCase{"api-ms-win-core-file-l1-1-0.dll", "test.exe", true},
+        TestCase{"api-ms-win-core-synch-l1-2-0.dll", "test.exe", true},
+        TestCase{"api-ms-win-core-heap-l1-1-0.dll", "test.exe", true},
+        TestCase{"api-ms-win-core-processthreads-l1-1-0.dll", "test.exe", true},
+        TestCase{"api-ms-win-core-libraryloader-l1-2-0.dll", "test.exe", true},
+        TestCase{"api-ms-win-this-contract-does-not-exist-l1-1-0.dll", "test.exe", false}
+    };
+
+    size_t passed = 0;
+
+    for (const auto& test : tests) {
+        auto result = resolver.resolve(std::string(test.contract), std::string(test.importer));
+        bool success = result.has_value() == test.expectSuccess;
+
+        std::cout << (success ? "[PASS] " : "[FAIL] ") << test.contract;
+
+        if (result) std::cout << " -> " << *result;
+        else std::cout << " -> unresolved";
+
+        std::cout << '\n';
+
+        if (success) ++passed;
+    }
+
+    std::cout << "\nPassed " << passed << "/" << tests.size() << " tests\n";
+}
 
 int main() {
+    emu::Process p;
+    const std::filesystem::path api = "guest/windows/system32/apisetschema.dll";
+    const std::filesystem::path prog = "guest/prog.exe";
 
 	emu::ApiSetResolver a;
-	const std::filesystem::path path = "guest/windows/system32/apisetschema.dll";
-	const std::string contract = "api-ms-win-core-file-l1-2-0.dll";
+    if (!a.initialize(api)) {
+        return 1;
+    }
 
 
-	if (!a.initialize(path)) {
-		return 1;
-	}
-
-	a.resolve(contract, "b");
-
-
-
+    emu::Loader l(p, a);
 
 	return 0;
 }
