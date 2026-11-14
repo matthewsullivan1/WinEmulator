@@ -57,6 +57,11 @@ int main() {
 
 
     emu::Loader l(p, a);
+    LoaderStatus status = l.loadExecutable(prog);
+
+
+
+
 
 	return 0;
 }
