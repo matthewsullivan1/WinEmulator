@@ -57,13 +57,13 @@ LoaderStatus Loader::loadImage(const PEFile& pe, Module& module) {
 		return status;
 	}
 
-	//status = resolveImageImports(pe, module);
-	//if (status != LoaderStatus::Success) {
-	//	std::cout
-	//		<< "[ERROR] Failed imports for " << module.name
-	//		<< " (status " << loaderStatusString(status) << ")\n";
-	//	return status;
-	//}
+	status = resolveImageImports(pe, module);
+	if (status != LoaderStatus::Success) {
+		std::cout
+			<< "[ERROR] Failed imports for " << module.name
+			<< " (status " << loaderStatusString(status) << ")\n";
+		return status;
+	}
 
 
 	// Move to after protections are set
@@ -563,25 +563,28 @@ LoaderStatus Loader::resolveImageImports(const PEFile& pe, Module& currentModule
 	return LoaderStatus::Success;
 }
 
+LoaderStatus Loader::loadExecutable(std::filesystem::path path) {
+
+	const auto imageOpt = PEFile::open(path);
+
+	if (!imageOpt) {
+		return LoaderStatus::InvalidImage;
+	}
 
 
-//LoaderStatus Loader::loadExecutable(std::filesystem::path path) {
-//
-//	PEFile image(path);
-//
-//	ImageContext* ctx = process_.addImage(path.filename().string());
-//	if (ctx == nullptr) {
-//		return LoaderStatus::InvalidImageContext;
-//	}
-//
-//	ctx->type = ImageType::Executable;
-//	ctx->path = path;
-//
-//	process_.setMainImage(ctx);
-//
-//	return loadImage(image, ctx);
-//}
-//
+	Module* exe = process_.modules().addModule(path.filename().string());
+	if (exe == nullptr) {
+		return LoaderStatus::InvalidImageContext;
+	}
+
+	exe->type = ImageType::Executable;
+	exe->path = path;
+
+	process_.modules().setMainModule(exe);
+
+	return loadImage(*imageOpt, *exe);
+}
+
 LoaderStatus Loader::loadModule(const std::string& name, Module** moduleOut) {
 
 	if (moduleOut == nullptr) {
@@ -767,43 +770,53 @@ LoaderStatus Loader::resolveProcAddress(ptr_t hmodule, WORD ordinal, uint64_t* a
 		return LoaderStatus::ExportTableReadFailed;
 	}
 
-	ExportContext exports;
+	IMAGE_DATA_DIRECTORY exportData{};
 
-	LoaderStatus status = getExportContext(hmodule, exports);
+	LoaderStatus status = getExportContext(hmodule, &exportData);
 
 	if (status != LoaderStatus::Success) {
 		return status;
 	}
 
-	const IMAGE_EXPORT_DIRECTORY& dir = exports.directory;
+	IMAGE_EXPORT_DIRECTORY exportDir{};
 
-	if (ordinal < dir.Base) {
+	MemoryStatus memstatus = process_.memory().read(
+		hmodule + exportData.VirtualAddress,
+		&exportDir,
+		sizeof(exportDir)
+	);
+
+	if (memstatus != MemoryStatus::Success) {
+		return LoaderStatus::ExportDirectoryReadFailed;
+	}
+
+	if (ordinal < exportDir.Base) {
 		return LoaderStatus::ExportNotFound;
 	}
 
-	DWORD functionIndex = static_cast<DWORD>(ordinal - dir.Base);
+	DWORD functionIndex = static_cast<DWORD>(ordinal - exportDir.Base);
 
-	if (functionIndex >= dir.NumberOfFunctions) {
+	if (functionIndex >= exportDir.NumberOfFunctions) {
 		return LoaderStatus::ExportNotFound;
 	}
 
 	DWORD functionRva;
 
-	MemoryStatus memStatus = process_.memory().read(
-		hmodule + dir.AddressOfFunctions + sizeof(DWORD) * functionIndex,
+	memstatus = process_.memory().read(
+		hmodule + exportDir.AddressOfFunctions + sizeof(DWORD) * functionIndex,
 		&functionRva,
 		sizeof(functionRva)
 	);
 
-	if (memStatus != MemoryStatus::Success) {
+	if (memstatus != MemoryStatus::Success) {
 		return LoaderStatus::ExportTableReadFailed;
 	}
 
 	return resolveExportRva(
 		hmodule,
 		functionRva,
-		exports.directoryRva,
-		exports.directorySize,
+		exportData.VirtualAddress,
+		exportData.Size,
 		addrOut,
 		depth
 	);
@@ -894,50 +907,30 @@ LoaderStatus Loader::resolveForwarder(const std::string& forwarder, ptr_t parent
 
 	Module* parentModule = process_.modules().findModuleByBase(parentModuleBase);
 
-	std::wstring parentName;
-
-	if (parentModule != nullptr) {
-		parentName.assign(
-			parentModule->name.begin(),
-			parentModule->name.end()
-		);
-	}
-
 	// Handle API-set contracts too
-	if (ApiSet::isContract(moduleName)) {
+	if (moduleName.starts_with("api-ms-") || moduleName.starts_with("ext-ms-")) {
 
-		std::wstring wname(
-			moduleName.begin(),
-			moduleName.end()
-		);
-
-		auto host = ApiSet::resolve(
-			wname,
-			parentName
-		);
+		auto host = apiSetResolver_.resolve(moduleName, parentModule->name);
 
 		if (!host) {
 			return LoaderStatus::ApiSetResolutionFailed;
 		}
 
-		moduleName = std::string(
-			host->begin(),
-			host->end()
-		);
+		moduleName = *host;
 	}
 
-	ImageContext* module = process_.findImage(moduleName);
+	Module* host = process_.modules().findModule(moduleName);
 
-	if (module == nullptr) {
+	if (host == nullptr) {
 
-		LoaderStatus status = loadModule(moduleName, &module);
+		LoaderStatus status = loadModule(moduleName, &host);
 
 		if (status != LoaderStatus::Success) {
 			return status;
 		}
 	}
 
-	if (module == nullptr) {
+	if (host == nullptr) {
 		return LoaderStatus::ForwarderError;
 	}
 
@@ -958,7 +951,7 @@ LoaderStatus Loader::resolveForwarder(const std::string& forwarder, ptr_t parent
 			WORD ordinal = static_cast<WORD>(value);
 
 			return resolveProcAddress(
-				module->baseAddress,
+				host->baseAddress,
 				ordinal,
 				addrOut,
 				depth
@@ -970,7 +963,7 @@ LoaderStatus Loader::resolveForwarder(const std::string& forwarder, ptr_t parent
 	}
 
 	return resolveProcAddress(
-		module->baseAddress,
+		host->baseAddress,
 		exportName,
 		addrOut,
 		depth

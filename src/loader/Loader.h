@@ -17,7 +17,7 @@ namespace emu {
         std::optional<std::filesystem::path> findImagePath(const std::string& name);
         LoaderStatus loadExecutable(std::filesystem::path path);
         LoaderStatus loadModule(const std::string& name, Module** moduleOut);
-        LoaderStatus getExportContext(uint64_t hmodule, IMAGE_EXPORT_DIRECTORY* out);
+        LoaderStatus getExportContext(uint64_t hmodule, win::IMAGE_DATA_DIRECTORY* out);
 
         LoaderStatus resolveProcAddress(uint64_t hmodule, const std::string& name, uint64_t* addrOut, size_t depth = 0);
         LoaderStatus resolveProcAddress(uint64_t hmodule, win::WORD ordinal, uint64_t* addrOut, size_t depth = 0);
