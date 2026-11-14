@@ -15,6 +15,13 @@ namespace emu {
         Failed
     };
 
+    enum class ModuleInitState {
+        Uninitialized, 
+        Initializing,
+        Initialized,
+        Failed
+    };
+
     enum class ImageType {
         Executable,
         DLL
@@ -31,6 +38,7 @@ namespace emu {
 
         ImageType type = ImageType::DLL;
         ModuleState state = ModuleState::Loading;
+        ModuleInitState initState = ModuleInitState::Uninitialized;
 
         std::vector<Module*> dependencies;
     };
